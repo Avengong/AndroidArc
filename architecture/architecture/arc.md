@@ -27,6 +27,7 @@ v
 1， framework层到底指的是哪些？ 
 support库、 Androidx库属于吗？
 Android系统属于framework？ 
+答： Android系统属于framework+虚拟机c++。
 
 ```
 
@@ -82,7 +83,8 @@ Boot Loader层：开机引导程序执行引导区扇区()的指令ROM，把操�
 
 # 胶水层 SysCall和jni
 
-java与native之间需要通过jni来调用 native与kernel之间需要syscall系统调用
+- java与native之间需要通过jni来调用
+- native与kernel之间需要syscall系统调用
 
 # 三、通信方式
 
