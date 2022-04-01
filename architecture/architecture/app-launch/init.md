@@ -1,24 +1,21 @@
 # init 进程篇
 
-swapper(0) 0号进程在kernel层fork出kthread进程后。从内核层来到用户空间，在用户空间的native层，fork()出init进程。
-init进程是操作系统在用户空间的第一个进程！
+按下开机键后，会进入BootLoader引导扇区，拉起OS。然后创建了第一个内核进程swapper()。pid=0。 swapper(0)
+0号进程在kernel层fork出kthread进程后。从内核层来到用户空间，在用户空间的native层，fork()出init进程。 init进程是操作系统在用户空间的第一个进程！
 
-开始native层的工作： 1，开机动画 2，HALL 硬件抽象层接口 3，audio、media等功能 4，native daemons 守护进程 5，servicemanager
-binder服务管理者？？
+开始native层的工作：
 
-具体过程是怎么样的？ 走的main方法？
+1. 开机动画
+2. HALL 硬件抽象层接口
+3. audio、media等功能
+4. native daemons 守护进程
+5. servicemanager binder服务管理者
 
-```
-参考：
-android 10 init入口调整：
-https://segmentfault.com/a/1190000023184321
-这不错！
-https://cloud.tencent.com/developer/article/1760352
-```
-
-之前是在init.cpp的main方法中。现在调整到main.cpp的main方法中，分阶段启动，职责更加清晰。
+Android 10对init的入口函数做了调整： 之前是在init.cpp的main方法中。现在调整到main.cpp的main方法中，分阶段启动，职责更加清晰。
 
 # 一、main.cpp
+
+> > system/core/init/main.cpp
 
 ```
 int main(int argc, char** argv) {
@@ -57,7 +54,6 @@ int main(int argc, char** argv) {
 }
 
 ```
-
 分为三个主要的阶段： 1，FirstStageMain 2，SetupSelinux 3，SecondStageMain
 
 ## 1.1 FirstStageMain
@@ -510,26 +506,63 @@ int SecondStageMain(int argc, char** argv) {
 
 init在解析各种.rc文件阶段，会解析 init.zygote.rc文件。
 
+> > system/core/rootdir/init.zygote64.rc
+
 ```
-service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-system-server
+service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-system-server
     class main
-    socket zygote stream 660 root system  // 开启socket服务端
-    onrestart write /sys/android_power/request_state wake
+    priority -20
+    user root
+    group root readproc reserved_disk
+    socket zygote stream 660 root system
+    socket usap_pool_primary stream 660 root system
+    onrestart exec_background - system system -- /system/bin/vdc volume abort_fuse
     onrestart write /sys/power/state on
+    onrestart restart audioserver
+    onrestart restart cameraserver
     onrestart restart media
+    onrestart restart media.tuner
     onrestart restart netd
+    onrestart restart wificond
+    task_profiles ProcessCapacityHigh
+    critical window=${zygote.critical_window.minute:-off} target=zygote-fatal
 
 ```
 
-职责： 1，创建zygote service服务 2，该服务执行 /system/bin/app_process 可执行文件 3，通过fork()开启进程，创建socket服务。
+职责： 1，创建zygote service服务 2，执行该服务对应的可执行文件 /system/bin/app_process/app_main.cpp 3，通过fork()
+开启进程，创建socket服务。 通过exev系统调用，进入到app_main.cpp的main()方法中 4，在main方法中调用runtime的start函数启动java测的 zygoteInit
+
+```
+// ....
+
+if (zygote) {
+        runtime.start("com.android.internal.os.ZygoteInit", args, zygote);
+    } else if (className) {
+        runtime.start("com.android.internal.os.RuntimeInit", args, zygote);
+    } else {
+        fprintf(stderr, "Error: no class name or --zygote supplied.\n");
+        app_usage();
+        LOG_ALWAYS_FATAL("app_process: no class name or --zygote supplied.");
+    }
+```
 
 # 三、总结
 
-init进程的核心职责： 1，属性值修改 通过开辟一块共享内存区域 2，回收僵尸进程 3，解析各种init.rc文件
+init进程的核心职责：
 
+1. 属性值修改 通过开辟一块共享内存区域,提供socket服务端
+2. 回收僵尸进程 通过epoll机制
+3. 解析各种init.rc文件 启动zygote
 
+![img.png](img.png)
 
-
+```
+参考：
+android 10 init入口调整：
+https://segmentfault.com/a/1190000023184321
+这不错！
+https://cloud.tencent.com/developer/article/1760352
+```
 
 
 
