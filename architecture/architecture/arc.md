@@ -107,6 +107,14 @@ Boot Loader层：开机引导程序执行引导区扇区()的指令ROM，把操�
 
 ## 系统启动系列
 
+init进程：挂在文件系统，解析各种.rc文件。 fork()出zygote进程。
+
+zygote进程 ：开启虚拟机VM，注册jni，fork() systemServer进程，创建socket服务端，响应别的app进程创建。 fork() systemServer进程。
+
+那么systemServer进程又做了什么呢？
+
+systemServer进程：
+
 ## 系统稳定性系列
 
 ## 四大组件系列

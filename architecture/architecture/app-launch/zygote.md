@@ -26,9 +26,12 @@ service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-s
 
 ```
 
-这其实就是个配置文件。 1，init首先会创建zygote服务。服务名字为 "zygote"
-如果该service启动过就return，如果没有启动，则调用fork()创建子进程，然后在子进程中调用execv(),进而进入可执行文件的main方法中。 2，找到服务对应的可执行文件
-/system/bin/app_process64/app_main.cpp，通过execev()系统调用 3，执行app_main.cpp中的main方法
+这其实就是个配置文件。
+
+1. init首先会创建zygote服务。服务名字为 "zygote"
+   如果该service启动过就return，如果没有启动，则调用fork()创建子进程，然后在子进程中调用execv(),进而进入可执行文件的main方法中。
+2. 找到服务对应的可执行文件 /system/bin/app_process64/app_main.cpp，通过execev()系统调用
+3. 执行app_main.cpp中的main方法
 
 至于为什么是app_main.cpp，Android.bp给出了答案：
 > > frameworks/base/cmds/app_process/Android.bp
@@ -54,10 +57,7 @@ cc_binary {
 
 ```
 
-## 1.1 service 的启动过程
-
 # 二、app_main.cpp
-
 ```
 int main(int argc, char* const argv[])
 {
@@ -226,8 +226,10 @@ int main(int argc, char* const argv[])
     }
     // 3 调用runtime的方法
     if (zygote) {
+    // 如果运行在zygote进程
         runtime.start("com.android.internal.os.ZygoteInit", args, zygote);
     } else if (className) {
+   
         runtime.start("com.android.internal.os.RuntimeInit", args, zygote);
     } else {
         fprintf(stderr, "Error: no class name or --zygote supplied.\n");
@@ -237,8 +239,12 @@ int main(int argc, char* const argv[])
 }
 ```
 
-主要做了三件事： 1， 创建AndroidRuntime 对象 2，解析启动参数， 如--zygote --start-system-server
-由于SystemServer进程也是zygote进程fork而来，因此也会走这个main方法，因此通过参数来区分是哪一个进程 3, 根据不同进程环境来调用runtime不同的方法
+主要做了三件事：
+
+1. 创建AndroidRuntime 对象
+2. 解析启动参数， 如--zygote --start-system-server
+   由于SystemServer进程也是zygote进程fork而来，因此也会走这个main方法，因此通过参数来区分是哪一个进程
+3. 根据不同进程执行环境来调用runtime不同的方法
 
 # 三、runtime.start()
 
@@ -305,6 +311,7 @@ void AndroidRuntime::start(const char* className, const Vector<String8>& options
     //1 开启虚拟机VM
     /* start the virtual machine */
     JniInvocation jni_invocation;
+    // 加载libart.so
     jni_invocation.Init(NULL);
     JNIEnv* env;
     if (startVm(&mJavaVM, &env, zygote, primary_zygote) != 0) {
@@ -382,14 +389,18 @@ void AndroidRuntime::start(const char* className, const Vector<String8>& options
 
 ```
 
-职责： 1，开启虚拟机VM 2，注册jni方法 3，回调java测com.android.internal.os.ZygoteInit的main方法
+职责：
+
+1. 开启虚拟机VM 先加载libart.so，找到虚拟机so文件中的JNI_CreateJavaVM_符号的地址，当真正执行startVM的时候，
+   就调用到so库中的JNI_CreateJavaVM的方法，启动虚拟机，至此虚拟机已经启动完成。具体内部如何执行，后面学习。
+2. 注册jni方法
+3. 回调java测com.android.internal.os.ZygoteInit的main方法
 
 ## 3.1  AndroidRuntime::startVm()
 
 > > frameworks/base/core/jni/AndroidRuntime.cpp
 
 ```
-
 int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool primary_zygote)
 {
     //...
@@ -414,7 +425,21 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool p
 }
 ```
 
-JavaVM* 是每个进程的上下文 JNIEnv* 是每个线程的上下文 当虚拟机初始化完成，jni就可以发布了。
+职责：
+
+JNI_CreateJavaVM 会调用之前从libart.so库中找到的方法，进入虚拟机的共享库中去执行。
+
+1. JavaVM* 是每个进程的上下文 , 每个进程都有自己的VM
+2. JNIEnv* 是每个线程的上下文，每个线程有自己的jniEnv指针对象
+3. 当虚拟机初始化完成，jni就可以发布了。
+
+如何理解上面的三句话？
+
+从进程角度出发，每个进程有且只有一个虚拟机实例。java层所有想要调用native层的方法都只能通过虚拟机中的jni层来实现。
+
+而真正的调用是发生在某个线程上的。因此，从线程的角度来看，多线程条件下，每个线程都有能独立的调用自己的native方法，拥有 独立的函数调用栈。因此jnienv就表示函数调用的上下文。
+
+因此，想要打通java和native的互相调用，那么就必须要依赖jni。而jni的映射注册又必须依赖虚拟机的创建完成。
 
 ## 3.2 注册jni startReg()
 
@@ -435,20 +460,25 @@ static int register_jni_procs(const RegJNIRec array[], size_t count, JNIEnv* env
 }
 ```
 
+array[i] 是一个数组，这个数组包含很多成员函数地址，真正执行对应的函数时候，就会注册java和native方法对应关系。
 jni本质上就是建立java方法和native方法的一个映射关系，让java和native能够实现互相调用。
 
-## 3.3 java层ZygoteInit类
+## 3.3 进入Java层
 
-至此，zygote进程从native层到了java层。
+通过jni的CallStaticVoidMethod方法，native调用java层的ZygoteInit.main()方法。 至此，zygote进程从native层到了java层。
+
+注意，至此，代码所在线程还是在zygote进程的主线程！
 
 # 四、Java层 ZygoteInit.main()
+
+native层的zygote进程，已完成了部分工作，现在到了java层。理所当然，侧重点肯定要处理class相关的逻辑。
 
 ```
 public static void main(String argv[]) {
         ZygoteServer zygoteServer = new ZygoteServer();
 
         // Mark zygote start. This ensures that thread creation will throw
-        // an error.
+        // an error. 标记zygote的开始，此时如果创建线程，则会抛出错误
         ZygoteHooks.startZygoteNoThreadCreation();
 
         // Zygote goes into its own process group.
@@ -514,6 +544,7 @@ public static void main(String argv[]) {
 
             // Do an initial gc to clean up after startup
             bootTimingsTraceLog.traceBegin("PostZygoteInitGC");
+            // 4 初始化gc 
             gcAndFinalize();
             bootTimingsTraceLog.traceEnd(); // PostZygoteInitGC
 
@@ -529,13 +560,14 @@ public static void main(String argv[]) {
             Seccomp.setPolicy();
 
             ZygoteHooks.stopZygoteNoThreadCreation();
-            // 4 拉起systemServer进程
+            // 5 拉起systemServer进程
             if (startSystemServer) {
                 Runnable r = forkSystemServer(abiList, socketName, zygoteServer);
 
                 // {@code r == null} in the parent (zygote) process, and {@code r != null} in the
                 // child (system_server) process.
                 if (r != null) {
+                    // 进入 systemServer进程 
                     r.run();
                     return;
                 }
@@ -556,6 +588,7 @@ public static void main(String argv[]) {
         // We're in the child process and have exited the select loop. Proceed to execute the
         // command.
         if (caller != null) {
+        // 6 最终，执行子进程的逻辑
             caller.run();
         }
     }
@@ -572,14 +605,13 @@ public static void main(String argv[]) {
 
 ## 4.1 解析参数
 
-```
+解析获取是否开启systemServer进程标志
 
+解析获取zygote server socket的名字
 
-```
+## 4.2 创建zygote进程socket服务
 
-## 4.2 创建zygote service
-
-为 zygote 的命令行连接指令，创建本地进程的socket服务。
+创建本进程的socket服务，响应后续其他进程的请求。
 
 ```
    
@@ -611,8 +643,13 @@ public static void main(String argv[]) {
 
 ```
 
-职责： 监听fd对应的文件描述符的变化， 当子进程通过fd对应的客户端socket连接服务端的地址，发送消息的时候，zygote服务端socket收到信息， 进行逻辑处理。
-此时的socket与网络中的socket是不一样的。此时的socket是跟某个文件描述符绑定的。 疑问：为什么不用binder而是用socket呢？
+职责：
+
+监听fd对应的文件描述符的变化， 当子进程通过fd对应的客户端socket连接服务端的地址，发送消息的时候，zygote服务端socket收到信息， 进行逻辑处理。
+
+此时的socket与网络中的socket是不一样的。此时的socket是跟某个文件描述符绑定的。网络中socket则是对tcp/udp的包装。
+
+疑问：为什么不用binder而是用socket呢？
 
 ## 4.3 preload Android资源
 
@@ -653,16 +690,20 @@ public static void main(String argv[]) {
 
 ```
 
-预加载系统类、资源、共享库so、文字、webview等。
+预加载系统类、资源、共享库so、文字、webview等，后续fork的子进程就能直接使用，提升新进程的启动速度。
 
 ## 4.4 拉起SystemServer进程
 
 ```
  /**
      * Prepare the arguments and forks for the system server process.
-     *准备参数，同时fork出 systemServer 进程
      * @return A {@code Runnable} that provides an entrypoint into system_server code in the child
      * process; {@code null} in the parent.
+     
+     准备参数，fork出 systemServer 进程。如果返回一个runnable对象不为null，则包含了systemServer进程的入口。
+     如果为null，则表示是zygote进程。
+     
+     
      */
 private static Runnable forkSystemServer(String abiList, String socketName,
             ZygoteServer zygoteServer) {
@@ -702,29 +743,250 @@ private static Runnable forkSystemServer(String abiList, String socketName,
             if (hasSecondZygote(abiList)) {
                 waitForSecondaryZygote(socketName);
             }
-            // 进程创建完成，关闭服务端socket 
+            // 子进程创建完成，关闭服务端socket。因为子进程不需要 
             zygoteServer.closeServerSocket();
             return handleSystemServerProcess(parsedArgs);
         }
 ```
 
-根据解析得到的参数，fork出systemServer进程。 至于handleSystemServerProcess()方法，后续单独学习。
+根据解析得到的参数， fork出systemServer进程。 当进入到子进程的代码中时，需要关闭从zygote进程继承而来的serverSocket服务。
+
+handleSystemServerProcess()方法，完成systemServer进程剩余的工作。
 
 ## 4.5 开启selectLoop
 
 ```
+/**
+     * Runs the zygote process's select loop. Accepts new connections as
+     * they happen, and reads commands from connections one spawn-request's
+     * worth at a time.
+     开启zygote进程的loop循环：同时处理
+     1 接收新的进程连接请求
+     2 处理已连接进程的的创建新进程的命令
+     */
+    Runnable runSelectLoop(String abiList) {
+        ArrayList<FileDescriptor> socketFDs = new ArrayList<>();
+        ArrayList<ZygoteConnection> peers = new ArrayList<>();
+         //把zygote进程添加进去
+        socketFDs.add(mZygoteSocket.getFileDescriptor());   
+        peers.add(null);
+
+        mUsapPoolRefillTriggerTimestamp = INVALID_TIMESTAMP;
+         //开启无线循环
+        while (true) {
+            fetchUsapPoolPolicyPropsWithMinInterval();
+            mUsapPoolRefillAction = UsapPoolRefillAction.NONE;
+
+            int[] usapPipeFDs = null;
+            StructPollfd[] pollFDs;
+
+            // Allocate enough space for the poll structs, taking into account
+            // the state of the USAP pool for this Zygote (could be a
+            // regular Zygote, a WebView Zygote, or an AppZygote).
+            if (mUsapPoolEnabled) {
+                usapPipeFDs = Zygote.getUsapPipeFDs();
+                pollFDs = new StructPollfd[socketFDs.size() + 1 + usapPipeFDs.length];
+            } else {
+                pollFDs = new StructPollfd[socketFDs.size()];
+            }
+
+            /*
+             * For reasons of correctness the USAP pool pipe and event FDs
+             * must be processed before the session and server sockets.  This
+             * is to ensure that the USAP pool accounting information is
+             * accurate when handling other requests like API blacklist
+             * exemptions.
+             */
+
+            int pollIndex = 0;
+            for (FileDescriptor socketFD : socketFDs) {
+                pollFDs[pollIndex] = new StructPollfd();
+                pollFDs[pollIndex].fd = socketFD;
+                pollFDs[pollIndex].events = (short) POLLIN;
+                ++pollIndex;
+            }
+
+            ...
+
+            int pollTimeoutMs;
+
+            if (mUsapPoolRefillTriggerTimestamp == INVALID_TIMESTAMP) {
+                pollTimeoutMs = -1;
+            } else {
+                long elapsedTimeMs = System.currentTimeMillis() - mUsapPoolRefillTriggerTimestamp;
+
+                if (elapsedTimeMs >= mUsapPoolRefillDelayMs) {
+                    // Normalize the poll timeout value when the time between one poll event and the
+                    // next pushes us over the delay value.  This prevents poll receiving a 0
+                    // timeout value, which would result in it returning immediately.
+                    pollTimeoutMs = -1;
+
+                } else if (elapsedTimeMs <= 0) {
+                    // This can occur if the clock used by currentTimeMillis is reset, which is
+                    // possible because it is not guaranteed to be monotonic.  Because we can't tell
+                    // how far back the clock was set the best way to recover is to simply re-start
+                    // the respawn delay countdown.
+                    pollTimeoutMs = mUsapPoolRefillDelayMs;
+
+                } else {
+                    pollTimeoutMs = (int) (mUsapPoolRefillDelayMs - elapsedTimeMs);
+                }
+            }
+
+            int pollReturnValue;
+            try {
+            // 如果fd没有消息 则会阻塞在这里
+                pollReturnValue = Os.poll(pollFDs, pollTimeoutMs);
+            } catch (ErrnoException ex) {
+                throw new RuntimeException("poll failed", ex);
+            }
+
+            if (pollReturnValue == 0) {
+                // The poll timeout has been exceeded.  This only occurs when we have finished the
+                // USAP pool refill delay period.
+
+                mUsapPoolRefillTriggerTimestamp = INVALID_TIMESTAMP;
+                mUsapPoolRefillAction = UsapPoolRefillAction.DELAYED;
+
+            } else {
+                boolean usapPoolFDRead = false;
+
+                while (--pollIndex >= 0) {
+                    if ((pollFDs[pollIndex].revents & POLLIN) == 0) {
+                        continue;
+                    }
+
+                    if (pollIndex == 0) {
+                        // Zygote server socket
+                         // 是Zygote server socket，建立新的连接 
+                        ZygoteConnection newPeer = acceptCommandPeer(abiList);
+                        peers.add(newPeer);
+                        socketFDs.add(newPeer.getFileDescriptor());
+
+                    } else if (pollIndex < usapPoolEventFDIndex) {
+                        // Session socket accepted from the Zygote server socket
+
+                        try {
+                            ZygoteConnection connection = peers.get(pollIndex);
+                            final Runnable command = connection.processOneCommand(this);
+
+                            // TODO (chriswailes): Is this extra check necessary?
+                            if (mIsForkChild) {
+                                // We're in the child. We should always have a command to run at
+                                // this stage if processOneCommand hasn't called "exec".
+                                if (command == null) {
+                                    throw new IllegalStateException("command == null");
+                                }
+
+                                return command;
+                            } else {
+                                // We're in the server - we should never have any commands to run.
+                                if (command != null) {
+                                    throw new IllegalStateException("command != null");
+                                }
+
+                                // We don't know whether the remote side of the socket was closed or
+                                // not until we attempt to read from it from processOneCommand. This
+                                // shows up as a regular POLLIN event in our regular processing
+                                // loop.
+                                if (connection.isClosedByPeer()) {
+                                    connection.closeSocket();
+                                    peers.remove(pollIndex);
+                                    socketFDs.remove(pollIndex);
+                                }
+                            }
+                        } catch (Exception e) {
+                            if (!mIsForkChild) {
+                                // We're in the server so any exception here is one that has taken
+                                // place pre-fork while processing commands or reading / writing
+                                // from the control socket. Make a loud noise about any such
+                                // exceptions so that we know exactly what failed and why.
+
+                                Slog.e(TAG, "Exception executing zygote command: ", e);
+
+                                // Make sure the socket is closed so that the other end knows
+                                // immediately that something has gone wrong and doesn't time out
+                                // waiting for a response.
+                                ZygoteConnection conn = peers.remove(pollIndex);
+                                conn.closeSocket();
+
+                                socketFDs.remove(pollIndex);
+                            } else {
+                                // We're in the child so any exception caught here has happened post
+                                // fork and before we execute ActivityThread.main (or any other
+                                // main() method). Log the details of the exception and bring down
+                                // the process.
+                                Log.e(TAG, "Caught post-fork exception in child process.", e);
+                                throw e;
+                            }
+                        } finally {
+                            // Reset the child flag, in the event that the child process is a child-
+                            // zygote. The flag will not be consulted this loop pass after the
+                            // Runnable is returned.
+                            mIsForkChild = false;
+                        }
+
+                    } else {
+                        // Either the USAP pool event FD or a USAP reporting pipe.
+
+                        // If this is the event FD the payload will be the number of USAPs removed.
+                        // If this is a reporting pipe FD the payload will be the PID of the USAP
+                        // that was just specialized.  The `continue` statements below ensure that
+                        // the messagePayload will always be valid if we complete the try block
+                        // without an exception.
+                        long messagePayload;
+
+                        try {
+                            byte[] buffer = new byte[Zygote.USAP_MANAGEMENT_MESSAGE_BYTES];
+                            int readBytes =
+                                    Os.read(pollFDs[pollIndex].fd, buffer, 0, buffer.length);
+
+                            if (readBytes == Zygote.USAP_MANAGEMENT_MESSAGE_BYTES) {
+                                DataInputStream inputStream =
+                                        new DataInputStream(new ByteArrayInputStream(buffer));
+
+                                messagePayload = inputStream.readLong();
+                            } else {
+                                Log.e(TAG, "Incomplete read from USAP management FD of size "
+                                        + readBytes);
+                                continue;
+                            }
+                        } catch (Exception ex) {
+                            if (pollIndex == usapPoolEventFDIndex) {
+                                Log.e(TAG, "Failed to read from USAP pool event FD: "
+                                        + ex.getMessage());
+                            } else {
+                                Log.e(TAG, "Failed to read from USAP reporting pipe: "
+                                        + ex.getMessage());
+                            }
+
+                            continue;
+                        }
+
+                        if (pollIndex > usapPoolEventFDIndex) {
+                            Zygote.removeUsapTableEntry((int) messagePayload);
+                        }
+
+                        usapPoolFDRead = true;
+                    }
+                }
+            }
+         ...
+        }
+    }
 
 
 ```
 
+主要职责： 开启zygote进程的select loop 无限循环(没有消息会阻塞)：同时处理 1 接收新的进程连接请求 2 处理已连接进程的的创建新进程的命令
 
+## 4.6 继续执行子进程的逻辑
 
+当zygote进程的socket处理完成，那么新进程就可以做自己的事情了。
 
+# 5 总结
 
-
-
-
-
+![img_1.png](img_1.png)
 
 
 
