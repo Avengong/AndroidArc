@@ -115,6 +115,10 @@ zygote进程 ：开启虚拟机VM，注册jni，fork() systemServer进程，创�
 
 systemServer进程：
 
+那么服务是怎么启动的呢？ AMS PMS WMS 等？？
+
+launch进程：
+
 ## 系统稳定性系列
 
 ## 四大组件系列
