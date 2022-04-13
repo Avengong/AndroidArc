@@ -91,7 +91,7 @@ java与native之间需要通过jni来调用 native与kernel之间需要syscall�
 
 ## binder原理
 
-基于c/s架构，包含5个部分： 客户端、服务端、ServiceManager、binder驱动。
+基于c/s架构，包含5个部分： 客户端、服务端、ServiceManager、binder驱动。 4.11-4.17号，完成学习。
 
 ## socket 原理
 
@@ -99,26 +99,34 @@ java与native之间需要通过jni来调用 native与kernel之间需要syscall�
 
 ## handler 原理
 
-消息循环机制。
+消息循环机制。-- 一周
 
 # 四、核心提纲
 
 ## 系统启动系列
 
+一周。
 ## 系统稳定性系列
 
+一周。
 ## 四大组件系列
 
+一周。
 ## 图形系列
 
+一周。
 ## 系统服务篇
 
+一周。
 ## 内存&&存储篇
 
+一周。
 ## 工具篇
 
+一周。
 ## 实战篇
 
+一周。
 
 
 
