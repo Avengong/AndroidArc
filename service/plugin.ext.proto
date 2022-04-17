@@ -1,0 +1,411 @@
+syntax = "proto3";
+option objc_class_prefix = "PB3";
+package plugin_pb;
+
+// 房间类型
+enum PluginRoomType {
+  RT_GUILD = 0; // 公会
+  RT_PERSONAL = 1; // 个人
+  RT_REWARD = 2; // 返利房
+}
+
+message PluginHomeTips {
+  int32  id = 1;            //id
+  string color = 2;            //颜色
+  string url = 3;            //url
+  string msg = 4;            //中文说明
+  bool room_display = 5;    //默认false 为标签在房间显示，true不显示
+}
+
+//筛选应用维度
+enum FilterDimensionType {
+  FilterDimensionDefault = 0; //默认
+  FilterDimensionPlayer = 1; //主播维度
+  FilterDimensionPlayerSkill = 2; //主播应用维度
+}
+
+//角标位置
+enum IconLocationType {
+  IconLocationDefault = 0; //默认
+  IconLocationUp = 1; //左上角
+  IconLocationDown = 2; //左下角
+}
+
+// 开关
+enum PluginSwitchType {
+  ST_ZERO = 0;    // 占位不使用
+  ST_USER_REMEMBER = 1; // 用户行为记忆
+  ST_INDEX = 2; //首页模块开关
+  ST_FOCUS_MESSAGE = 3; // 好友动态消息提醒
+}
+
+enum PluginSwitchStatus {
+  SWITCH_ZERO = 0;  // 占位不使用
+  SWITCH_ON = 1; // 开
+  SWITCH_OFF = 2; // 关
+  SWITCH_WHITELIST = 3; // 白名单模式
+}
+
+message PluginSwitch {
+  PluginSwitchType switch = 1;
+  PluginSwitchStatus status = 2;
+}
+
+enum PluginSexType {
+  UNKNOWN = 0;
+  MAIL = 1;
+  FEMAIL = 2;
+}
+
+
+enum PluginBcFriendType {
+  BcFriendTypeNone = 0;
+  BcFriendTypeHead = 1;   // 头条
+  BcFriendTypeNormal = 2; // 普通
+}
+
+message PlayerImageInfo {
+  int64   id = 1;
+  int32   width = 2;
+  int32   height = 3;
+  bool    is_video = 4;
+  string  url = 5;
+}
+
+// 是否有效
+enum StatusType {
+  STATUS_INVALID = 0;
+  STATUS_VALID = 1;
+}
+
+// 房间装饰类型
+enum PhomeDecorateType{
+  PDT_NONE = 0; //占位
+  PDT_ROOM_BACKDROP = 1;
+  PDT_ROOM_SIGN = 2;
+  PDT_ROOM_FRAME = 3;
+}
+message RoomDecorate{
+  int64 decorate_id = 1;
+  PhomeDecorateType decorate_type = 2;
+  string pic_url = 3; // 9.0版本后弃用
+  string pc_pic_url = 4;
+  int64 weight = 5;
+  string shelter_url = 6; // 9.0版本后弃用
+  string pc_shelter_url = 7;
+  string stretchable_url = 8; // 拉伸图地址
+}
+
+// 上传类型
+enum PluginUploadType {
+  TypeZero = 0;
+  HeadAlbumImg = 1;    // 房间头像 (不用，只是为兼容咪呀)
+  HeadIconImg = 2;    // 用户头像
+  DynamicsImg = 3;    // 咪窝(动态)图片
+  ClientLog = 4;    // 客户端日志
+  TipOffsImg = 5;    // 举报
+  Indetity = 6;    // 身份证
+  PMMedia = 7;    // 私聊/公屏图片，(有生命周期，私聊消息需要前端保存在本地)
+  Voice = 8;    // 声音
+  BillVoice = 9;    // 接单声音
+  BillPicture = 10;   // 接单图片
+  CmsSingleImg = 11;   // 安利与吐槽单张图片
+  CmsCombineImg = 12;   // 安利与吐槽多张图片
+  CommunityImg = 13;   // 社区动态图片
+  CommunityVideo = 14;   // 社区动态视频
+  CommunityAudio = 15;   // 社区动态声音
+  CommunityGroupImg = 16;   // 社区圈子相片
+  GreetVoice = 26;   // 打招呼语音
+}
+
+//  oss上传回调:  Obj=xxx.phome.PHomeIntObj, Func=UresOssCallback
+message PluginUresOssCallbackReq {
+  PluginUploadType type = 1;
+}
+message PluginUresOssCallbackRes {
+}
+
+//圈子类型
+enum CommunityGroupType{
+  CGT_Normal = 0;//普通
+  CGT_CLAN = 1;//公会
+  CGT_ADMIN = 2;//后台创建
+}
+
+message PluginPlayer {
+  sint64 id = 1; // 游客ID<=0
+  string nickname = 2;
+  PluginSexType sex = 3;
+  sint64 id2 = 4; // 靓号. ==0时没有
+  string icon = 5; // 图标
+  sint64 flags = 6; // 标志，按位存储。各位表示意思参考PlayerFlags
+  sint64 flags2 = 30; // 标志，按位存储。各位表示意思参考PlayerFlags_2
+  sint64 charm = 8;
+  sint32 charmLevel = 15; // 魅力等级
+  sint32 wealthLevel = 32; // 财富等级
+  sint32 wealth = 9; // 财富值
+  uint32 online_exp = 10; // 在线经验
+  uint32 createAt = 11; // 注册时间
+  bool has_passwd = 12; // 是否有密码
+  bool is_phone = 13; // 是否是手机号注册
+  sint32 flowerLevel = 33; // 浇花等级
+  sint64 flower = 34; //浇花值
+  bool is_online = 35;//是否在线
+  map<int32, int32> flags_kv = 36; //标记, key-value存储, key:参考 enum PlayerFlagKey{}, value:参考key对应的enum{}
+  sint64 new_wealth = 37;          // 新财富值
+  repeated PAuthInfo auth_info = 39; // 歌手、声优认证信息
+}
+
+message PluginUserInfo {
+  sint64 user_id = 1;
+  string city = 2;
+  string signature = 3;  // 签名
+  string birthday = 4;   // 生日
+  sint32 intimate_slot = 5;  // 挚友位数
+  string mind = 6;       // 心声
+  sint32 short_id_slot = 7;   // 靓号槽数
+}
+
+message PluginRoomInfo {
+  sint64 room_id = 1;         // 房间Id
+  string name = 2;          // 房间名称
+  string greeting = 3;       // 欢迎语
+  sint32 category = 4;       // 房间标签
+  sint32 pattern = 5;        // 房间模式
+  string password = 6;       // 房间密码
+  int32 online = 7;          // 在线人数
+  sint32 new_patter = 8;     // 新房间模式
+  sint32 voice = 9;          // 房间音质
+  bool is_reward_room = 10;  // 是否返利房
+}
+
+//圈子审核操作类型
+enum CommunityGroupOpt{
+  CGO_NONE = 0;
+  CGO_Reject = 1;
+  CGO_Allow = 2;
+  CGO_AllReject = 3;
+}
+enum CommunityGroupLeaveOpt{
+  GLO_NONE = 0;
+  GLO_LEAVE = 1;
+  GLO_KICK = 2;
+  GLO_DISBAND = 3;
+}
+
+enum CommunityPlayerGroupType{
+  PGT_NONE = 0;
+  PGT_JOIN = 1;
+  PGT_STORE = 2;
+}
+
+enum PluginBillPlayerStatus {
+  BP_NONE = 0;    // 默认 (也显示关闭，点进去，提示完善资料才能开启)
+  BP_OPEN = 1;    // 开启
+  BP_CLOSE = 2;  // 关闭
+  BP_FREEZE = 3;  // 冻结
+}
+// 审核状态
+enum PluginBillPlayerCheckStatus {
+  BPC_None = 0;    // 默认
+  BPC_CHECKING = 1; // 审核中 （不可提交）(管理后台显示：审核类型为新传)
+  BPC_CHECKED_SUCC = 2;   // 审核通过 (可以提交新资料)
+  BPC_CHECKED_FAIL = 3;  // 审核失败 (可以提交新资料)
+  BPC_RE_CHECKING = 4;  // 重新审核中 （不可提交） (管理后台显示：审核类型为修改)
+  BPC_RE_CHECKED_FAIL = 5;  // 重新审核失败 (可以提交新资料)
+}
+
+enum PluginBillSkillType {
+  BST_NONE = 0;      // 占位
+  BST_FIRST = 1;      // 主技能
+  BST_SECOND = 2;      // 副技能
+}
+
+message PluginBillSkill {
+  PluginBillSkillType type = 1;
+  int32 skill = 2;  // 技能列表
+  int64 skill_create_at = 3;  // 技能创建时间
+  int32 order_num = 4; // 接单数量
+  string intro_text = 5; // 技能介绍
+  int32 price = 6; // 价格
+}
+
+// 接单玩家名片
+message PluginBillPlayerCard {
+  int32 level = 1;    // 等级
+  repeated int32 skills = 2; // 技能列表
+  PluginBillPlayerStatus status = 3;  // 接单状态
+  PluginBillPlayerCheckStatus check_status = 4; //  getPlayer方法才有值，审核状态
+  repeated PluginBillSkill bill_skills = 5;    //技能列表(分类)
+}
+
+// KG类型
+enum PluginOnOffType {
+  POOT_ZERO = 0;  //占位不用
+  OXYGEN_BAR_TREND_GIF = 1; // 氧吧gif动态开关
+  OXYGEN_BAR_COMMUNITY_PICTURE = 2; // 氧吧文字动态限制开关
+  OXYGEN_VIDEO_BUTTON = 3; // 视频划卡底部按钮开关
+  OXYGEN_PHOME_REPORT = 4; // phome上传洞察事件开关
+}
+
+message PluginSystemMsgNotice {
+  string msg = 1; //发送内容
+  uint32 send_time = 2; // 发送时间
+  uint32 language = 3; //语言类型
+  string router_url = 4; //
+  string picture = 5;     //图片路径
+  string picture_router = 6;     //图片跳转路由
+  string mask_text = 7;     //遮罩文字
+  string bottom_text = 8;     //底部文字
+  string bottom_router = 9;     //底部跳转路由
+  string msg_title = 10;     //信息标题
+  bytes room_id = 11;     //房间id
+  uint32 status = 12; //消息状态 1.未发送 2.已发送 3.未发送已过期 4.已发送已过期
+  int64 overdue_time = 13; //过期时间
+  string hyperlink = 14; //超链接文本
+  uint32 msg_type = 15; //消息类型
+}
+
+message PlayerBaseInfo {
+  int64 id = 1;
+  int64 id2 = 2;
+  string nick_name = 3;
+  string icon = 4;
+}
+
+message PlayerActMsg{
+  PlayerAction action = 1;
+  string msg = 2;
+}
+
+enum PlayerAction {
+  PA_NONE = 0;           // 占位
+  PA_NO_ACTION = 1;      // 无行为,不在线或不在房间
+  PA_SELF_ROOM = 2;      // 在自己的房间
+  PA_CLAN_NO_CHAIR = 3;  // 在公会房麦下
+  PA_CHAIR = 4;          // 麦上
+  PA_GAMING = 5;         // 在玩游戏
+  PA_SINGING = 6;        // 在播歌-使用PC端酷狗播放歌曲/ 增加APP播放器播歌逻辑
+  PA_OPEN_CHAIR = 7;     // 语音互动-用户在开启麦克风
+  PA_RECEIVE_GIFT = 8;   // 收礼-用户收到礼物
+  PA_SINGING_CHAIR = 9;  // 在唱歌-用户播放歌曲，同时开启麦克风，（仅酷狗播放器，读取到歌曲名有伴奏关键字的歌曲）
+  PA_ORDER = 10;         // 可接单-当前处于可接单的陪玩用户
+  PA_CHATING = 11;       // 在聊天-用户回复IM消息
+}
+
+enum PhomeRoomPattern {
+  PRP_GAME = 0; // 开黑
+  PRP_STANDARD = 1; // 常规模式
+  PRP_PERSONAL = 20; // 个人模式
+  PRP_INTIMATE = 21; // 陪伴模式 (挚友模式)
+  PRP_SHOW = 22; // 表演模式
+  PRP_MATE = 60; // 交友
+  PRP_SEND_ORDER = 80; // 派单模式
+  PRP_GAME_PLATFORM = 81; //游戏模式
+  PNRP_MOBA_TEAM = 85;                     // 游戏开黑模式
+  PNRP_ORGANIZE_MOBA_TEAM = 86;            // 游戏开黑派单模式
+}
+
+enum UserSongType{
+  UST_None = 0;
+  UST_PLAY = 1;//播放
+  UST_STOP = 2;//停止
+}
+
+message MatchUserGameReq {
+  int32 room_id = 1; //房间id
+  int32 game_id = 2; //游戏id
+}
+
+message MatchUserGameRes {
+
+}
+
+message MatchUserGameCancelReq {
+  int32 room_id = 1; //房间id
+  int32 game_id = 2; //游戏id
+  int32 player_id = 3; //用户
+}
+
+message MatchUserGameCancelRes {
+}
+
+// 增加资产
+message PluginGain {
+  uint64 type = 1; // 类型，1金币，2钻石，3礼物
+  uint64 gift_id = 2; // 礼物ID
+  uint64 num = 3; // 数量
+}
+// 扣除物品
+message PluginLoss {
+  uint64 type = 1; // 类型，1金币，2钻石，3礼物
+  uint64 gift_id = 2; // 礼物ID
+  uint64 num = 3; // 数量
+}
+
+// 单人增损请求
+message PluginAssetsGainReq {
+  uint64 player_id = 1; // 发起者
+  repeated PluginGain gains = 2; // 发起者收益
+  repeated PluginLoss loss = 3; // 发起者扣除
+  int32 type = 4; // 操作类型
+  string reMark = 5; // 操作描述
+  int32 gift_type = 6; // 物品获得类型
+  string gift_reMark = 7; // 物品获得描述
+  int32 loss_gift_type = 8; // 物品失去类型
+  string loss_gift_reMark = 9; // 物品失去描述
+  bool is_super_admin = 10;   // 是否是超级管理
+
+}
+
+message PluginBagItem {
+  uint32 gift_id = 1;              // 礼物id
+  uint32 amount = 2;              // 数量
+  string cteate_at = 3;            // 时间
+}
+
+// 单人增损返回
+message PluginAssetsGetRes {
+  repeated PluginBagItem items = 1; // 背包道具列表
+  int64 gold = 2; //金币
+  uint32 silver = 3; //银币，暂时没有用
+  uint32 gift_ticket = 4; //钻石
+  uint32 charge = 5; //累计金额
+}
+
+// 视频推荐来源
+enum VideoRecmdSource {
+  VST_ZERO = 0;      // 占位
+  VST_RULES = 1;     // 服务端规则
+  VST_ALGORITHM = 2; // 算法推荐
+}
+
+// 歌手、声优认证类型
+enum PAuthType {
+  AuthTypeNone = 0;           // 无认证
+  AuthTypeSinger = 1;         // 歌手认证
+  AuthTypeVoicer = 2;         // 声优认证
+  AuthTypeSurface = 3;        // 颜值认证
+  AuthTypeHaveSong = 4;       // 是否拥有歌单
+  AuthTypeStar = 5;           // 明星认证
+}
+
+// 认证状态
+enum PAuthStatus {
+  AOS_None = 0;     // 未认证
+  AOS_Activate = 1; // 已认证
+  AOS_Block = 2;    // 冻结
+}
+
+// 歌手、声优认证信息
+message PAuthInfo {
+  PAuthType auth_type = 1;    // 认证类型
+  sint32 level = 2;           // 等级
+  sint64 lev_exp = 3;         // 经验值
+  string url = 4;             // 图标URL
+  PAuthStatus status = 5;     // 认证状态
+  int64 song_num = 6;         // 电子歌单可上传歌曲数量（-1为不限制）
+  string name = 7;            // 认证名称
+  string start_color = 8;     // 开始颜色
+  string end_color = 9;       // 结束颜色
+}

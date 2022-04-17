@@ -1,0 +1,799 @@
+syntax = "proto3";
+option objc_class_prefix = "PB3";
+package plugin_pb;
+
+import "plugin.ext.proto";
+
+// 广播cmdId定义 // 204
+enum CommunityCmdId {
+  IC_CommunityZero = 0; // 占位
+  IC_Community = 204001; // 个人消息红点 CommunityPlayerMsgRedPoint
+  IC_CommunityGroupLimit = 204002;
+  IC_PlayerGroupList = 204003;//用户圈子列表
+  IC_GroupApply = 204004;//圈子申请消息红点
+  IC_TrendsCheckNoPass = 204005; //动态审核不通过
+  IC_TrendsCheckResult = 204006; //动态审核结果 TrendsCheckResult
+  IC_TrendsCommentCheckResult = 204007; //评论审核结果 TrendsCommentCheckResult
+  IC_TrendsCommemtMsg = 204008; // 用户评论推送 CommunityPlayerMsg
+  IC_TrendsLikeMsg = 204009; // 用户点赞推送 CommunityPlayerMsg
+}
+
+enum CommunityNavStyle {
+  CNS_None = 0; // 默认
+}
+
+enum CommunityModuleType {
+  CMT_None = 0;
+  CMT_Group_My = 1;  // 我的圈子
+  CMT_Group_Collection = 2;  // 我收藏的圈子
+  CMT_Group_History = 3;  // 最近看过的圈子
+  CMT_Group_Hot = 4;  // 热门圈子
+  CMT_Group_Recommend = 5;  // 推荐的圈子
+  CMT_Group_Define = 6;  // 自定义圈子
+  CMT_Trend_My = 7;  // 我的动态
+  CMT_Trend_Focus = 8;  // 我关注的动态
+  CMT_Trend_New = 9;  // 最新动态
+  CMT_Trend_Recommend = 10; // 推荐动态
+  CMT_Trend_Hot = 11; // 热门动态
+  CMT_Trend_Define = 12; // 自定仪分类
+  CMT_Tag_Admin = 13; // 后台添加的标签
+  CMT_Tag_Define = 14; // 自定义的标签
+}
+
+
+
+message CommunityRightButton {
+  string             icon = 1;
+  string             text = 2;
+  CommunityRightRule rule = 3;
+  string             route = 4;
+}
+
+enum CommunityRightRule {
+  CRR_None = 0; // 占位
+  CRR_Refresh = 1; // 刷新
+  CRR_Route = 2; // 路由，跳转详情也用路由的方式跳转
+  CRR_Clean = 3; // 清空
+  CRR_NextPage = 4; // 下一页
+  CRR_Text = 6; // 仅显示
+}
+
+message CommunityTagList {
+  repeated TrendTag list = 1;
+}
+
+
+message CommunityGroupDataList {
+  repeated CommunityGroupData list = 1;
+  CommunityModuleType module_type = 2;  // 模块数据类型
+}
+
+message CommunityGroupData {
+  CommunityGroupInfo group_info = 1;
+  CommunityTrendData trend = 2;
+  int32              index = 3;
+}
+
+// 成就信息
+message Effort {
+  int64 effort_id = 1;
+  string effort_title = 2;
+  string effort_content = 3;
+  string effort_icon = 4; //
+}
+
+message CommunityGroupInfo {
+  int64              id = 1; // 圈子ID
+  string             icon = 2; // 圈子图片
+  string             name = 3; // 圈子名称
+  int32              member_num = 4; // 成员数量
+  int32              trend_num = 5; // 动态数量
+  string             introduction = 6; // 简介
+  int32              red_num = 7; // 红点 >0 有红点
+  CommunityGroupType type = 8; // 是否是公会圈子
+  bool               is_auditing = 9; //是否审核中
+}
+
+message CommunityTrendDataList {
+  repeated CommunityTrendData list = 1;
+  CommunityModuleType module_type = 2;  // 模块数据类型
+}
+
+message AtPlayer {
+  int64 id = 1;
+  string name = 2;
+}
+
+message CommunityTrendData {
+  int64             id = 1;  // 动态ID
+  Publisher         publisher = 2;  // 发布者ID
+  string            content = 3;  // 动态内容
+  int32             like_num = 4;  // 点赞数量
+  int32             comment_num = 5;  // 评论数量
+  repeated TrendTag tags = 6;  // 标签
+  int64             publish_at = 7;  // 发不时间
+  repeated MediaResource media_urls = 8;  //多媒体资源列表
+  bool              is_gave_like = 9;  // 是否点过赞
+  int32             index = 10;
+  repeated GroupInfoSimple groups = 11;
+  repeated AtPlayer at_player = 12; // @用户
+  int64             top = 13;  // 设置置顶的时间戳
+  int32 skill_id = 14; // 技能id
+  int32 ia_id = 15; // 互动id
+  int32 activity_id = 16; // 该条视频的活动id，没有则0
+  repeated PAuthInfo auth_info_list = 17; // 用户认证信息
+  string tag_url = 18; // 标签url
+  int32 play_num = 19; // 播放次数
+  TrendGameInfo game = 20;
+  bool is_like = 21; // 是否已赞
+  TrendsComment comments = 22;
+  string ago = 23; // 时间
+  Effort effort = 24; // 成就信息
+}
+
+// 动态游戏数据结构
+message TrendGameInfo {
+  string game_icon = 1;
+  string game_name = 2;
+  string game_msg = 3; // 游戏播报信息
+  int64 game_id = 4; // 游戏id
+  int32 screen_direction = 5;
+}
+
+// 公会等级图标类型（与bill.ext.proto）一致
+enum CommunityClanIconType {
+  CCIT_NORMAL = 0; // 普通公会
+  CCIT_RELY = 1;   // 挂靠公会
+  CCIT_BILL = 2;  // 点单公会
+}
+
+message Publisher {
+  int64  id = 1;
+  int64  id2 = 2;
+  int32  sex = 3; // common sex
+  string name = 4;
+  string icon = 5;
+  int64  room_id = 6;
+  bool   is_bill_player = 7;
+  int32  wealth_level = 8;
+  int32  charm_level = 9;
+  int64  clan_id = 10;
+  string clan_name = 11;
+  int64  clan_level = 12;
+  string clan_icon_word = 13;
+  CommunityClanIconType icon_type = 15; // 公会等级图标类型
+  string signature = 16;  // 用户签名
+}
+
+message CommunityGroupTrendList {
+  repeated CommunityTrendData list = 1;
+  CommunityGroupInfo          group_info = 2; // 圈子信息
+  bool                        collection = 3; // 是否收藏
+  CommunityGroupStatus        status = 4; // 状态
+  int32                       applying_num = 5; // 申请人数
+}
+
+enum CommunityGroupStatus {
+  CGS_None = 0; // 占位不用
+  CGS_Applicable = 1; // 申请加入
+  CGS_Applying = 2; // 申请中
+  CGS_Added = 3; // 已加入
+  CGS_Owner = 4; // 圈主
+}
+
+message TrendTag {
+  int64  id = 1;
+  string name = 2;
+  int32  index = 3;
+  string icon = 4; // 标签图标
+  int64 hot = 5; // 热度 =参与人数*热度系数，热度系数暂定10，参与人数=（分享+评论+点赞+发布动态)相加
+  string comment = 6; // 描述
+  string url = 7; // 详情跳转url
+  string button_text = 8; // 跳转按钮文本
+  TrendTagStyle style_id = 9; // 标签展开样式id
+}
+
+enum TrendTagStyle {
+  TrendTagStyle_None = 0; // 占位不用，旧的样式
+  TrendTagStyle_Img = 1; // 图文样式
+}
+
+enum MediaType {
+  MediaType_None = 0; // 占位不用
+  MediaType_Png = 1; // 图片png
+  MediaType_Gif = 2; // 图片git
+  MediaType_Video = 3; // 视频
+  MediaType_Audio = 4; // 声音
+}
+enum ContentType {
+  ContentType_None = 0; // 占位不用
+  ContentType_Text = 1; // 文字
+  ContentType_PictureText = 2; // 图文 默认全图片
+  ContentType_Video = 3; // 视频
+  ContentType_Audio = 4; // 声音
+  ContentType_Game = 5; // 游戏
+}
+
+
+message CommunityPlayerInfo {
+  int64 id = 1;
+  int64 id2 = 2;
+  string nick_name = 3;
+  string icon = 4;
+  PluginSexType sex = 5;
+}
+
+enum PublishGroupType {
+  PublicGroupType_None = 0; //占位不用
+  PublicGroupType_Public = 1; //公开
+  PublicGroupType_Select = 2; //指定圈子
+}
+
+message MediaResource {
+  MediaType media_type = 1;    //多媒体类型
+  string media_url = 2;    //多媒体资源url  传全地址 http://xxx.c/ddd, 兼容旧版本：如果是视频/音频，则该字段为封面图
+  string cover_url = 3;       //封面图
+  int32 media_width = 4;
+  int32 media_height = 5;
+  int32 media_second = 6; // 资源时长(音视频秒数)
+  string video_url = 7; // 视频url
+  string audio_url = 8; // 音频url
+  string video_id = 9; // 视频上传返回的fileID
+  string trans_video_url = 10; // 转码后 视频url
+  string trans_cover_url = 11; // 转码后 封面图
+  int64 trend_id = 12; // 动态id
+}
+
+message Photo {
+  MediaResource media = 1;
+  string trend_content = 2; // 动态内容
+  int32 media_id = 3; // 媒体id
+}
+
+message CommunityPublishReq {
+  string content = 1;    //文本内容
+  repeated MediaResource media_urls = 2;    //多媒体资源列表
+  ContentType content_type = 3;
+  repeated int64 tags = 4;     //标签列表 (留空)
+  PublishGroupType group_type = 5;    //发到圈子类型 (留空)
+  repeated int64 groups = 6;     //发到圈子列表 (留空)
+  repeated int64 at_player_id = 7;    //@用户
+  repeated AtPlayer at_player = 8;    //@用户信息，上面的 at_player_id 弃用，客户端不再传值 (留空）
+  int64 skill_id = 9;    // 技能ID
+  int64 interaction_id = 10;   // 互动ID
+  int64 game_id = 11; // 游戏id (客户端留空)
+  Effort effort = 12; // 成就信息 (客户端留空)
+}
+message CommunityPublishRes {
+  int64 trends_id = 1;    //动态id
+  string toast_text = 2;    //toast提示文案
+  int64 create_at = 3;    //动态创建时间
+}
+
+enum TrendsOperType {
+  TrendsOperType_None = 0; //占位不用
+  TrendsOperType_Like = 1; //点赞
+  TrendsOperType_Unlike = 2; //取消点赞
+  TrendsOperType_Comment = 3; //评论
+  TrendsOperType_DelComment = 4; //删除评论
+  TrendsOperType_DelTrends = 5; //删除动态
+  TrendsOperType_Share = 6; //分享
+  TrendsOperType_Like_Video = 7; //划卡视频里点赞
+  TrendsOperType_Unlike_Video = 8; //划卡视频里取消点赞
+  TrendsOperType_Comment_Like = 9; // 评论点赞
+  TrendsOperType_Comment_Unlike = 10; // 取消评论点赞
+}
+message CommunityTrendsOperReq {
+  TrendsOperType  oper_type = 1; //动态操作类型
+  int64 trends_id = 2; //动态id
+  int32 comment_id = 3; //评论id
+  string comment = 4; //评论内容
+  repeated MediaResource comment_media_urls = 5;    //评论多媒体资源列表
+  repeated AtPlayer at_player = 6; //@用户信息
+  VideoRecmdSource recmd_source = 7; // 划卡视频推荐来源
+  string recmd_source_id = 8;   // 算法ID
+  string trace_info = 9; // 阿里云推荐详情
+}
+message CommunityTrendsOperRes {
+  int32 comment_id = 1; //评论id, oper_type = TrendsOperType_Comment 时使用
+}
+
+message CommunityTrendsListReq {
+  int64 player_id = 1;
+  int32 index = 2;    //用于翻页, 请求第一页时传0
+}
+message CommunityTrendsListRes {
+  repeated CommunityTrendData list = 1;
+  int32 next_index = 2;        //-1代表列表没有下一页了, 否则可以用此值在CommunityTrendsListReq中请求下一页
+  bool is_privacy = 3; // 是否隐私, 如果是true，则用户开启隐私，需要关注才能看，false则是废隐私
+  bool is_black = 4; // 是否拉黑，如果是true，则被拉黑
+}
+
+message CommunityLastTrendsReq {
+  int64 player_id = 1;
+}
+
+message CommunityLastTrendsRes {
+  repeated CommunityTrendData list = 1;
+}
+
+message TrendsComment {
+  int64 trends_id = 1;
+  int64 trends_player_id = 2;            // 动态主人id， 我是动态主人可以删除动态
+  int32 comment_id = 3;
+  int32 level = 4;            //评论层级
+  int32 comment_num = 5;            //评论数量
+  repeated TrendsCommentDetail details = 6;
+  int32 next_index = 7;        //-1代表列表没有下一页了, 否则可以用此值在CommunityTrendsCommentsReq中请求下一页
+}
+message TrendsCommentDetail {
+  int64 trends_id = 1;
+  int32 comment_id = 2;
+  CommunityPlayerInfo comment_player = 3;       // 评论者， 我是评论者可以删除动态
+  CommunityPlayerInfo to_player = 4;      // 被评论者， 被评论者为空表示没有被评论者
+  string content = 5;
+  int64 comment_time = 6;
+  TrendsComment comments = 7;
+  repeated MediaResource media_urls = 8;    //多媒体资源列表
+  repeated AtPlayer at_player = 9;    //@用户
+  int32 like_num = 10; // 点赞数
+  bool is_like = 11;
+  string ago = 12;// 格式化时间
+}
+
+message CommunityTrendsDetailReq {
+  int64 trends_id = 1;
+}
+message CommunityTrendsDetailRes {
+  CommunityTrendData  trends = 1;
+  repeated CommunityPlayerInfo likers = 2;  //点赞id列表预览
+}
+
+enum CommunityTrendsCommentsOrderType {
+  Order_Hots = 0; // 热度排序
+  Order_Time = 1; // 时间排序
+}
+
+message CommunityTrendsCommentsReq {
+  int64 trends_id = 1;
+  int32 comment_id = 2;
+  int32 index = 3;    //用于翻页, 请求第一页时传0
+  CommunityTrendsCommentsOrderType order_type = 4; // 排序方式
+}
+message CommunityTrendsCommentsRes {
+  TrendsComment comments = 1;
+  int32 comment_num = 2;  // 评论数量
+  int32 like_num = 3; // 点赞数量
+  bool is_like = 4; // 是否已赞
+}
+
+message CommunityTrendsLikersReq {
+  int64 trends_id = 1;
+  int32 index = 2;    //用于翻页, 请求第一页时传0
+}
+message CommunityTrendsLikersRes {
+  repeated CommunityGroupPlayerItem likers = 1;  //点赞id列表
+  int32 next_index = 2;  //-1代表列表没有下一页了, 否则可以用此值在CommunityTrendsLikersReq中请求下一页
+}
+
+// 公会信息
+message CommunityClanInfo {
+  int64 id = 1;    // 公会id； 当状态开关列表中公会开启时， 判断clan_id>0时，显示公会入口, 入口url找h5同事提供
+  string icon_word = 2; // 公会图标文字
+  string level_name = 3; // 公会等级名称
+  string name = 4; // 公会名称
+  int64  level = 6;//公会等级
+  CommunityClanIconType icon_type = 7; // 公会等级图标类型
+}
+
+//创建圈子
+message CommunityCreateOrUpdateGroupReq{
+  int64 group_id = 1;//圈子Id 0创建 非0更新
+  string group_name = 2;//圈子名
+  string group_img = 3;//圈子图标 传全地址 http://xxx.c/ddd
+  string group_describe = 4;//圈子描述
+}
+message CommunityCreateOrUpdateGroupRes{
+  int64 group_id = 1;//圈子id
+}
+
+//加入圈子
+message CommunityJoinGroupReq{
+  int64 group_id = 1;
+  string apply_msg = 2;
+}
+message CommunityJoinGroupRes{
+}
+message CommunityJoinInfo{
+  int64 player_id = 1;
+  int64 group_id = 2;
+  int64 apply_at = 3;
+  string apply_msg = 4;
+}
+
+//审核列表
+message CommunityVerifyListReq{
+  int64 group_id = 1;//圈子Id
+  int32 index = 2;
+}
+message CommunityVerifyListRes{
+  repeated VerifyItem item = 1;
+  int32 next_index = 2;
+}
+message VerifyItem{
+  CommunityJoinInfo info = 1;
+  MemberBaseInfo baseInfo = 2;
+}
+message MemberBaseInfo{
+  int64 player_id = 1;
+  int64 player_id2 = 2;
+  int32 sex = 3; // common SexType
+  string name = 4;
+  string signature = 5;
+  int32 charm_lv = 6;
+  int32 wealth_lv = 7;
+  string icon = 8;
+  CommunityClanInfo clan = 9;//公会信息
+}
+
+//审核操作
+message CommunityVerifyJoinReq{
+  int64 group_id = 1;
+  int64 player_id = 2;
+  CommunityGroupOpt opt = 3;//0拒绝 1允许 2全部拒绝
+}
+message CommunityVerifyJoinRes{
+}
+
+//收藏圈子
+message CommunityStoreGroupReq{
+  int64 group_id = 1;
+  int32 opt = 2; //0收藏1取消收藏
+}
+message CommunityStoreGroupRes{
+}
+//查看圈子信息
+message CommunityGroupInfoReq{
+  int64 group_id = 1;
+}
+message CommunityGroupInfoRes{
+  GroupDetail base_detail = 1;
+  int32 member_num = 2;
+  int32 trend_num = 3;
+  MemberBaseInfo OwnerInfo = 4;//圈主信息
+  int32 apply_num = 5;//申请数
+}
+
+message GroupDetail{
+  int64 group_id = 1;//圈子Id 0创建 非0更新
+  string group_name = 2;//圈子名
+  string group_img = 3;//圈子图标
+  string group_describe = 4;//圈子描述
+  int64 clan_id = 5;//圈子的公会id
+  CommunityGroupStatus status = 6;
+  bool is_store = 7;//是否收藏
+  bool is_auditing = 8;//是否审核中
+}
+//离开圈子(主动/被动/解散)
+message CommunityLeaveGroupReq{
+  int64 group_id = 1;
+  int64 leave_player_id = 2;//0主动离开
+  CommunityGroupLeaveOpt opt = 3; //0离开1踢出2解散
+}
+message CommunityLeaveGroupRes{
+}
+
+//用户圈子(加入、收藏)
+message CommunityPlayerGroupListReq{
+  CommunityPlayerGroupType player_group_type = 1; //0加入1收藏
+  int64 player_id = 2;
+  int32 index = 3;//分页
+}
+message CommunityPlayerGroupListRes{
+  repeated GroupListItem item = 1;
+  int32 next_index = 2;//-1到底
+}
+message GroupListItem{
+  GroupDetail base_detail = 1;
+  int32 member_num = 2;
+  int32 trend_num = 3;
+  bool is_owner = 4;
+}
+
+
+//圈子成员列表
+message CommunityGroupPlayerListReq{
+  int64 group_id = 1;
+  int32 index = 2;
+}
+message CommunityGroupPlayerListRes{
+  repeated CommunityGroupPlayerItem item = 1;
+  int32 next_index = 2;
+}
+message CommunityGroupPlayerItem{
+  MemberBaseInfo info = 1;
+  int64 room_id = 2;//0不在房间
+}
+//创建标签
+message CommunityCreateTagReq{
+  string tag_name = 1;
+}
+message CommunityCreateTagRes{
+}
+//所有标签
+message CommunityAllTagReq{
+
+}
+message CommunityAllTagRes{
+  repeated TrendTag item = 1;
+}
+
+
+
+// 个人消息
+// 请求当前红点
+message CommunityPlayerMsgRedPointReq {
+}
+message CommunityPlayerMsgRedPointRes {
+  CommunityPlayerMsgRedPoint red_point = 1;
+}
+
+// 清除当前红点
+message CommunityPlayerMsgClearRedPointReq {
+}
+message CommunityPlayerMsgClearRedPointRes {
+}
+
+// 推送当前红点
+message CommunityPlayerMsgRedPoint {
+  int32 num = 1;
+}
+
+
+// 请求个人消息
+message CommunityPlayerMsgReq {
+  int32 index = 1;    //用于翻页, 请求第一页时传0
+  CommunityMsgShowType show_type = 2;    // 展示类型
+}
+message CommunityPlayerMsgRes {
+  bytes list = 1; // 客户端需要根据id去重，消息数组，当为show_type为CMsgShowType_Like or CMsgShowType_Comments时，为CommunityPlayerMsgs；当show_type为CMsgShowType_System，使用protocol协议src/main/proto/pb中的MailMsgs
+  int32 next_index = 2; // -1代表列表没有下一页了, 下一页index
+  CommunityMsgShowType show_type = 3; // 展示类型
+}
+
+
+enum CommunityMsgShowType {
+  CMsgShowType_None = 0;
+  CMsgShowType_Like = 1; // 点赞
+  CMsgShowType_Comments = 2; //评论
+  CMsgShowType_System = 3; // 系统消息
+  CMsgShowType_Follow = 4; // 关注
+}
+
+message CommunityPlayerMsgs {
+  repeated CommunityPlayerMsg msg = 1; // 个人消息列表
+}
+
+// 个人消息结构
+message CommunityPlayerMsg {
+  int32 id = 1;
+  CommunityTrendData trend = 2;    // nil 显示动态已删除
+  CommunityPlayerInfo player = 3; // 评论者 id=-1 为系统操作；id=自己; 根据这个主语会不一样，当CommunityPlayerMsgType 为 9，10，11 时，这里存来源者的信息
+  CommunityPlayerInfo commented_player = 4;    // 被评论者 id > 0
+  int32 comment_id = 5;    // 评论Id
+  bool self_trend = 6;    // 是否是自己的动态
+  string comment = 7;    // 内容 优先显示评论内容
+  int64 creat_at = 8;    // 时间戳
+  CommunityPlayerMsgType type = 9;    // 消息类型
+  string desc = 10;    // 说明 点赞，取消点赞的文案客户端自己写，emoji服务端没有
+}
+
+
+enum CommunityPlayerMsgType {
+  CMsgType_None = 0;
+  CMsgType_Like = 1; // 点赞
+  CMsgType_UnLike = 2; //取消点赞
+  CMsgType_Share = 3; //分享
+  CMsgType_Comments = 4; //评论
+  CMsgType_UnComments = 5; //删除动态
+  CMsgType_ReplyComments = 6; //回复评论
+  CMsgType_Del = 7; //删除动态
+  CMsgType_AtPlayer = 8; //@用户
+  CMsgType_FocusMe = 9; // 关注了我
+  CMsgType_Like_Comment = 10; // 点赞评论
+  CMsgType_UnLikee_Comment = 11; // 取消点赞评论
+}
+
+message CommunityPlayerStatReq {
+  int64 player_id = 1;
+}
+
+message CommunityMailMsgItem {
+  int64 id = 1; // 系统消息id
+  int32 cmd_id = 2;        // 广播的cmdId
+  int32 create_at = 3;    // 创建时间
+  bytes data = 4;            // 根据cmdId，创建对应的结构体
+}
+
+message CommunityPlayerStatRes {
+  int32 trends_num = 1;   //动态数量
+  int32 join_group_num = 2; //圈子数量
+}
+
+enum AgreementOperType {
+  AgreementOperType_None = 0;
+  AgreementOperType_Check = 1;  //查看是否已经同意
+  AgreementOperType_Agree = 2;  //同意发布动态的协议
+}
+
+message CommunityAgreementReq {
+  AgreementOperType   oper_type = 1;
+}
+
+message CommunityAgreementRes {
+  bool is_agree = 1;  // 查看是否已经同意时使用
+}
+
+message CommunityPublishPermissionReq {
+}
+message CommunityPublishPermissionRes {
+  bool is_permit = 1;             // true:允许发动态
+  int32 max_select_label_num = 2; // 发布动态时用户选标签上限数量
+  int32 max_select_group_num = 3; // 发布动态时用户选圈子上限数量
+  int32 max_select_media_num = 4; // 发布动态时用户选资源上限数量
+}
+
+message CommunityGroupLimitReq{
+
+}
+message CommunityGroupLimitRes{
+  int32 wealth_lv = 1;
+  int32 charm_lv = 2;
+  int32 and_or = 3;//0或1与
+  int32 max_active_group_num = 4;//非公会圈子最多申请、创建、加入总数
+  int32 max_group_member_num = 5;//非公会圈子最大人数上限
+  bool  show_create_button = 6;
+  int64 invited_invalid_time = 7;//邀请失效时间
+  string create_msg = 8;
+}
+
+message ClearCommunityPlayerMsgReq {
+}
+
+message ClearCommunityPlayerMsgRes {
+}
+
+message GroupInfoSimple {
+  int64              id = 1; // 圈子ID
+  string             name = 2; // 圈子名称
+}
+
+message CheckCreateGroupReq{
+
+}
+message CheckCreateGroupRes{
+
+}
+
+
+//申请数量推送
+message ApplyJoinNumPush{
+  int32 apply_num = 1;
+  int64 group_id = 2;
+}
+
+// 用户加入圈子数推送
+message PlayerGroupListResPush{
+  repeated GroupListItem item = 1;
+}
+
+//邀请加入
+message InviteJoinGroupReq{
+  int64 invited_id = 1; //被邀请人id
+  int64 group_id = 2;
+}
+message InviteJoinGroupRes{
+
+}
+
+message ImmediateJoinGroupReq{
+  int64 group_id = 1;
+}
+
+message ImmediateJoinGroupRes{
+
+}
+
+//推送: IC_TrendsCheckNoPass = 204005; //动态审核不通过
+message TrendsCheckNoPass {
+  int64 trends_id = 1; //动态id
+}
+
+//敏感词检查
+message ContentSensitiveCheck {
+  string toast_text = 1;          //toast 提示文案
+  string checked_content = 2;     //屏蔽敏感词后的内容
+}
+
+//动态审核结果
+message TrendsCheckResult {
+  int64 trends_id = 1;    //动态id
+  bool pass = 2;
+}
+
+//评论审核结果
+message TrendsCommentCheckResult {
+  int64 trends_id = 1;    //动态id
+  int32 comment_id = 2; //评论id
+  bool pass = 3;
+}
+
+message CommunityFocusFriendReq {
+
+}
+
+message CommunityFocusFriendRes {
+  int32 num = 1;
+  string route = 2; // 跳转路由
+}
+
+message ClearFocusFriendReq {
+
+}
+
+message ClearFocusFriendRes {
+
+}
+
+
+
+// 获取违规图片示例
+message ViolationPictureExampleReq{
+}
+
+message ViolationInfo {
+  string url = 1; // 地址
+  string content = 2; // 内容
+}
+
+message ViolationPictureExampleRes{
+  string title = 1; // 标题
+  repeated ViolationInfo list = 2; // 示例列表
+  string remark = 3; // 底部注释
+}
+
+message TrendTagInfoReq {
+  int64 id = 1; // 动态标签id
+}
+message TrendTagInfoRes {
+  TrendTag tag = 1;
+}
+
+// 获取技能、互动信息
+message SkillInteractionInfoReq{
+
+}
+
+message SkillInteractionInfoRes{
+  repeated TrendsSkillInfo skill_list = 1; // 技能列表
+  repeated TrendsInteractionInfo interaction_list = 2; // 互动列表
+}
+
+message TrendsSkillInfo{
+  int64 skill_id = 1; // 技能ID
+  string skill_name = 2; // 技能名称
+  string icon = 3; // 图片
+}
+
+message TrendsInteractionInfo{
+  int64 interaction_id = 1; // 互动ID
+  string interaction_name = 2; // 互动名称
+  string icon = 3; // 图片
+}
+
+message SystemMiscMsgItem{
+  CommunityMsgShowType show_type = 1; // 消息类型
+  sint64 unread_num = 2 ; // 未读消息数
+  string desc = 3; // 内容描述，由于多语言问题，CMsgShowType_Like，CMsgShowType_Comments，CMsgShowType_Follow消息类型只会返回用户昵称，客户端需要额外补充
+  int64 msg_time = 4; // unix时间戳，单位秒
+}

@@ -1,0 +1,184 @@
+syntax = "proto3";
+option objc_class_prefix = "PB3";
+package plugin_pb;
+
+import "community.ext.proto";
+import "plugin.ext.proto";
+
+// 广播cmdId定义 // 304
+enum VideoCmdId {
+  IC_VideoZero = 0; // 占位
+}
+
+// 获取类型
+enum VideoGetType {
+  VGT_ZERO = 0; // 占位
+  VGT_FIRST = 1; // 进app后首次拉取
+}
+
+message VideoReq {
+  VideoGetType get_type = 1; // 拉取类型
+  int64 last_trend_id = 2; // 最后一条视频动态ID
+  repeated int64 last_ids = 3;  // 最后20条视频id列表
+  int32 last_index = 4; // 倒数条数请求（5，2，1）
+}
+message VideoRes {
+  repeated VideoInfo infos = 1;   // 视频信息
+  repeated int64 preload_idx = 2; // 预加载位置（倒数）
+}
+
+message VideoInfo {
+  int64 trend_id = 1; // 视频ID
+  int64 player_id = 2; // 玩家ID
+  string name = 3; // 玩家昵称
+  PluginSexType sex = 4;
+  string icon = 5; // 玩家头像
+  string video_url = 6; // 视频url
+  int64 like_num = 7; // 点赞数
+  int64 comment_num = 8; // 评论数
+  string content = 9; // 动态内容
+  repeated TrendTag tags = 10; // 标签
+  bool is_gave_like = 11; // 是否点过赞
+  string cover_url = 12; // 视频第一帧url
+  int32 video_width = 13; // 视频宽
+  int32 video_height = 14; // 视频高
+  int32 skill_id = 15; // 技能id
+  int32 ia_id = 16; // 互动id
+  int32 activity_id = 17; // 该条视频的活动id，没有则0
+  int64 source_id = 18; // 客户端在对这条视频做操作（VideoOptReq）的时候，返回该id
+  int32 from = 19; // 来源
+  int32 quality = 20; // 品质
+  int32 label_id = 21; // 标签ID
+  VideoRecmdSource recmd_source = 22; // 视频推荐来源
+  string recmd_source_id = 23; // 算法ID
+  string trace_info = 24; // 阿里云推荐详情
+  repeated PAuthInfo auth_info_list = 25; // 认证信息
+}
+
+// 视频玩家信息
+message VideoPlayerReq {
+  int64 trend_id = 1; // 视频ID
+  int32 from = 2; // 来源
+  int32 quality = 3; // 品质
+  int32 label_id = 4; // 标签ID
+}
+message VideoPlayerRes {
+  VideoContentTop content_top = 1; //
+  VideoButton button = 2; // 底部按钮
+  VideoPlayerStatus status = 3;
+  int64 room_id = 4; // 玩家所在房间id
+  VideoRecReason rec_reason = 5; // 推荐原因
+  ExtraInfo extra_info_btn = 6; // 新按钮
+}
+
+message ExtraInfo {
+  EIButtonType button_type = 1; // 按钮类型
+  string button_icon = 2; // 按钮图标
+  string button_content = 3; // 按钮内容
+  string icon = 4; // 图标
+  string content = 5; //内容
+  int32 order_num = 6; // 接单数量
+  string skill_info = 7; // 技能介绍
+  int64  expire_time = 8; // 显示倒计时
+  string jump_url = 9; // 跳转路由
+  int32  price = 10; // 价格
+}
+
+enum EIButtonType {
+  EIBT_ZERO = 0; // 占位
+  EIBT_SKILL = 1; // 互动按钮
+  EIBT_CHAT = 2; // 聊一聊按钮
+  EIBT_LIAO_TA = 3; // 撩TA
+  EIBT_ZHENXINHUA = 4; // 真心话
+  EIBT_CP_YUEHUI = 5; //  CP约会
+}
+
+enum VideoPlayerStatus {
+  VPS_ZERO = 0; // 占位
+  VPS_OUT_ROOM = 1; // 不在房
+  VPS_IN_ROOM = 2; // 在房
+  VPS_ON_CHAIR = 3; // 在麦上
+  VPS_SINGING = 4; // 在唱歌
+}
+
+message VideoContentTop {
+  VideoCTopType ct_type = 1; // l类型
+  string icon = 2; // icon，可能没有
+  string text = 3; // 文字，可能为空
+  string jump_url = 4; // 跳转路由，可能为空
+}
+
+enum VideoCTopType {
+  VCT_ZERO = 0; // 占位
+  VCT_ACTIVITY = 1; // 活动
+  VCT_SAME_CITY = 2; // 同城
+  VCT_FALLOW = 3; // 你关注的人
+}
+
+// 视频底部按钮
+message VideoButton {
+  string icon = 1; // 活动图标
+  string text = 2; // 文字
+  string jump_url = 3; // 跳转路由
+  VideoButtonType ct_type = 4; // 类型
+  int64 type_id = 5; // 互动/技能id
+}
+
+// 视频推荐原因
+enum VideoRecReason {
+  VRR_ZERO = 0; // 占位
+  VRR_NEARBY = 1; // 附近的人
+  VRR_FOCUS = 2; // 关注的人
+  VRR_GOOD = 4; // 精选
+  VRR_TOP = 3; // 运营位置 置顶
+  VRR_LABEL = 5; // 标签内容库
+}
+
+enum VideoButtonType {
+  VBT_ZERO = 0; // 占位
+  VBT_INTERACTION = 1; // 互动
+  VBT_BILL = 2; // 技能点单
+  VBT_IM = 3;   // 私聊
+}
+
+// 我喜欢的视频
+message VideoLikeReq {
+  int32 page = 1; // 从1开始
+}
+message VideoLikeRes {
+  int32 next_page = 1; // 下一页页码，如果没有下一页，则为-1
+  repeated VideoInfo infos = 2; //
+}
+
+enum VideoOptType {
+  VOT_ZERO = 0; // 占位
+  VOT_START = 1; // 开始
+  VOT_COMPLETE = 2; // 播完了某个视频
+  VOT_STOP = 3; // 停止
+  VOT_UNINTERESTED = 4; // 不感兴趣
+  VOT_COVER = 5; // 加载完封面
+}
+
+// 用户播放、结束播放视频
+message VideoOptReq {
+  VideoOptType opt_type = 1;
+  int64 trend_id = 2; //
+  int64 second = 3; // 视频剩余秒数
+  int32 left_num = 4; // 客户端本地还剩下多少个视频没有划过
+  int64 source_id = 5; // VideoInfo 里的 source_id
+  VideoRecmdSource recmd_source = 6;  // 视频推荐来源
+  string recmd_source_id = 7; // 算法ID
+  string trace_info = 8; // 阿里云推荐详情
+  bool first_play = 9; // 首次完播
+}
+message VideoOptRes {
+}
+
+message VideoButtonReportReq{
+  EIButtonType btn = 1; // 按钮类型
+  int64 trend_id = 2; // 视频ID
+}
+
+message VideoButtonReportRes{
+
+}
