@@ -19,7 +19,8 @@ B进程收到数据后
 
 三者做了什么事情
 
-serviceManager： 1， open 驱动 2，告诉驱动程序，我就是大管家。我就是SM 4， while循环 读驱动获取数据 5， 解析数据 调用：
+serviceManager： 1， open 驱动 2，告诉驱动程序，我就是大管家。我就是SM（本质上是在内核中创建一个特殊节点binder_node,方便后续查找） 4， while循环
+读驱动获取数据 5， 解析数据 调用：
 
 ```
 a，addService，在链表中记录名字；
@@ -322,8 +323,14 @@ APP： open--misc_open==> 根据次设备好从链表中找到misc_device，取�
 
 ## 服务的注册的过程：
 
-serviceManager binder_thread_writer， BC_enter_loop serviceManager binder_thread_read， BR_NOOP？？//
-因为对于所有的读操作，数据头部都是BR_NOOP。 serviceManager 休眠...
+```
+serviceManager 
+binder_thread_writer， 
+BC_enter_loop 
+serviceManager binder_thread_read， 
+BR_NOOP？？// 因为对于所有的读操作，数据头部都是BR_NOOP。
+serviceManager 休眠...
+```
 
 补充知识：
 
@@ -336,7 +343,9 @@ serviceManager binder_thread_writer， BC_enter_loop serviceManager binder_threa
 
 只有以上四个命令会涉及到进程 A B两个进程。 其他的所有cmd命令BC_XXX,BR_XXX都是app与驱动的交互，用来改变或者修改状态。
 
-具体过程 1，内核函数 binder_open的实现
+具体过程
+
+1，内核函数 binder_open的实现
 
 ```
 创建binder_proc，表示当前进程。 
@@ -400,13 +409,59 @@ int svcmgr_publish(struct binder_state *bs, uint32_t target, const char *name, v
     bio_put_string16_x(&msg, SVC_MGR_NAME);
     // 在后面继续放入服务的名字，先放入长度，在放入字符串如 hello、ams
     bio_put_string16_x(&msg, name);
-    // 传入flat_binder_obj
+    // 传入flat_binder_obj，对应内核的binder_node节点
     bio_put_obj(&msg, ptr);
 ```
 
 之前讲过，server会在内核中创建一个binder_node结构体，里面的东西到底是什么？ APP应该会传入一个东西给内核。 转换成binder_transaction_data,
-存入bwr结构体传给内核： 2，发送数据调用ioctl 进入内核 APP内核空间： binder_ioctl
-把数据放入serviceManager进程的todo链表中，并唤醒serviceManager。 首先找到目的进程 然后在拷贝用户内存的数据到驱动内核的内存空间 唤醒
+存入bwr结构体传给内核：
+
+2，发送数据调用ioctl
+
+```
+进入内核 APP内核空间： binder_ioctl
+把数据放入serviceManager进程的todo链表中， 并唤醒serviceManager。 
+    首先找到目的进程 
+    然后在拷贝用户内存的数据到驱动内核的内存空间 
+    唤醒
+        
+```
+
+# 重点总结
+
+client其实就是把数据拷贝到server进程 mmap映射好的的那块内存。 让后把 唤醒server进程，直接读取。
+
+```
+test_server：用户空间
+1,name：hello
+2, flat_binder_obj
+内核：
+创建一个binder_node节点，给目的进程sm创建一个binder_ref节点
+
+binder_proc{
+    rb nodes；红黑树
+    refs_by_desc; 红黑树，用来找binder_ref
+    refs_by_node; 红黑树，用来找binder_ref
+}
+
+binder_ref{
+    desc;
+    binder_node node;
+
+}
+
+serviceManager的内核驱动中，
+对应一个binder_proc，里面有nodes红黑树，对应binder_node(表示一个服务)
+binder_ref中引用了binder_node+desc, binder_node中也引用了binder_proc。 
+调用具体服务的提供的函数。到用户态。
+
+用户态： 
+在svclist链表中，创建一个svcinfo节点：name+handle。
+
+
+```
+
+
 
 
 
