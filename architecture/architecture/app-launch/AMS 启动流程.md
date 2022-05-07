@@ -721,12 +721,13 @@ AMS的构造方法中有监听 本身对象和 mHandler。
     private void start() {
         // 移除所有进程组 
         removeAllProcessGroups();
-        // 开启CPU监控 线程
+        // 开启CPU使用 监控线程
         mProcessCpuThread.start();
-
+        // 注册 电池服务到SM 和 localServices
         mBatteryStatsService.publish();
         mAppOpsService.publish(mContext);
         Slog.d("AppOps", "AppOpsService published");
+        // 通知atm ActivityManagerInternal已加 
         LocalServices.addService(ActivityManagerInternal.class, new LocalService());
         mActivityTaskManager.onActivityManagerInternalAdded();
         mUgmInternal.onActivityManagerInternalAdded();
@@ -754,13 +755,14 @@ AMS的构造方法中有监听 本身对象和 mHandler。
             // 注册AMS
             ServiceManager.addService(Context.ACTIVITY_SERVICE, this, /* allowIsolated= */ true,
                     DUMP_FLAG_PRIORITY_CRITICAL | DUMP_FLAG_PRIORITY_NORMAL | DUMP_FLAG_PROTO);
-            // 注册 ProcessStats 进程统计服务
+            // 注册 ProcessStats 进程统计服务  IProcessStats
             ServiceManager.addService(ProcessStats.SERVICE_NAME, mProcessStats);
             // 注册 内存信息服务
             ServiceManager.addService("meminfo", new MemBinder(this), /* allowIsolated= */ false,
                     DUMP_FLAG_PRIORITY_HIGH);
             // 注册 图形相关服务
             ServiceManager.addService("gfxinfo", new GraphicsBinder(this));
+            // 数据库服务
             ServiceManager.addService("dbinfo", new DbBinder(this));
             if (MONITOR_CPU_USAGE) {
                 ServiceManager.addService("cpuinfo", new CpuBinder(this),
@@ -768,14 +770,18 @@ AMS的构造方法中有监听 本身对象和 mHandler。
             }
             // 注册 权限服务
             ServiceManager.addService("permission", new PermissionController(this));
-            // 注册 processinfo 进程信息服务
+            // 注册 processinfo 进程信息服务 IProcessInfoService
             ServiceManager.addService("processinfo", new ProcessInfoService(this));
             // systemServer进程的 application
+            通过解析framework-res.apk里的AndroidManifest.xml获得ApplicationInfo
             ApplicationInfo info = mContext.getPackageManager().getApplicationInfo(
                     "android", STOCK_PM_FLAGS | MATCH_SYSTEM_ONLY);
+            //  为ActivityThread 安装 system application相关信息,将framework-res.
+            apk对应的ApplicationInfo安装到LoadedApk中的mApplicationInfo
             mSystemThread.installSystemApplicationInfo(info, getClass().getClassLoader());
 
             synchronized (this) {
+               // 创建systemServer的 进程对象 processRecord ,赋值
                 ProcessRecord app = mProcessList.newProcessRecordLocked(info, info.processName,
                         false,
                         0,
@@ -809,7 +815,257 @@ AMS的构造方法中有监听 本身对象和 mHandler。
     }
 ```
 
-### 2.3.3  systemReady()
+1. 注册各种Binder服务：ams、meminfo、 gfxinfo等
+2. 通过解析framework-res.apk里的AndroidManifest.xml获得ApplicationInfo
+3. 为ActivityThread 安装system appInfo信息。最终把 ApplicationInfo 安装到loadedApk中的mApplicationInfo。
+4. 新建systemServer的进程对象 processRecord ,用来维护进程信息
+5. 开始监管 app的操作
+
+
+
+### 2.3.4  systemReady()
+
+```
+   private void startOtherServices(){
+   //...
+         // We now tell the activity manager it is okay to run third party
+        // code.  It will call back into us once it has gotten to the state
+        // where third party code can really run (but before it has actually
+        // started launching the initial applications), for us to complete our
+        // initialization.
+        mActivityManagerService.systemReady(() -> {
+            Slog.i(TAG, "Making services ready");
+            traceBeginAndSlog("StartActivityManagerReadyPhase");
+            // 设置bootphase阶段 为 PHASE_ACTIVITY_MANAGER_READY=550
+            // 该阶段后 系统服务可以发送广播了
+            mSystemServiceManager.startBootPhase(
+                    SystemService.PHASE_ACTIVITY_MANAGER_READY);
+            traceEnd();
+            traceBeginAndSlog("StartObservingNativeCrashes");
+            try {
+                // 开始监控 native 奔溃 
+                mActivityManagerService.startObservingNativeCrashes();
+            } catch (Throwable e) {
+                reportWtf("observing native crashes", e);
+            }
+            traceEnd();
+
+            // No dependency on Webview preparation in system server. But this should
+            // be completed before allowing 3rd party
+            final String WEBVIEW_PREPARATION = "WebViewFactoryPreparation";
+            Future<?> webviewPrep = null;
+            // 启动 webview 
+            if (!mOnlyCore && mWebViewUpdateService != null) {
+                webviewPrep = SystemServerInitThreadPool.get().submit(() -> {
+                    Slog.i(TAG, WEBVIEW_PREPARATION);
+                    TimingsTraceLog traceLog = new TimingsTraceLog(
+                            SYSTEM_SERVER_TIMING_ASYNC_TAG, Trace.TRACE_TAG_SYSTEM_SERVER);
+                    traceLog.traceBegin(WEBVIEW_PREPARATION);
+                    ConcurrentUtils.waitForFutureNoInterrupt(mZygotePreload, "Zygote preload");
+                    mZygotePreload = null;
+                    mWebViewUpdateService.prepareWebViewInSystemServer();
+                    traceLog.traceEnd();
+                }, WEBVIEW_PREPARATION);
+            }
+
+            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
+                traceBeginAndSlog("StartCarServiceHelperService");
+                mSystemServiceManager.startService(CAR_SERVICE_HELPER_SERVICE_CLASS);
+                traceEnd();
+            }
+
+            traceBeginAndSlog("StartSystemUI");
+            try {
+               // 开始系统ui界面，通过启动一个服务service 
+                startSystemUi(context, windowManagerF);
+            } catch (Throwable e) {
+                reportWtf("starting System UI", e);
+            }
+            traceEnd();
+            // Enable airplane mode in safe mode. setAirplaneMode() cannot be called
+            // earlier as it sends broadcasts to other services.
+            // TODO: This may actually be too late if radio firmware already started leaking
+            // RF before the respective services start. However, fixing this requires changes
+            // to radio firmware and interfaces.
+            if (safeMode) {
+                traceBeginAndSlog("EnableAirplaneModeInSafeMode");
+                try {
+                    connectivityF.setAirplaneMode(true);
+                } catch (Throwable e) {
+                    reportWtf("enabling Airplane Mode during Safe Mode bootup", e);
+                }
+                traceEnd();
+            }
+            traceBeginAndSlog("MakeNetworkManagementServiceReady");
+            try {
+                if (networkManagementF != null) {
+                    networkManagementF.systemReady();
+                }
+            } catch (Throwable e) {
+                reportWtf("making Network Managment Service ready", e);
+            }
+            CountDownLatch networkPolicyInitReadySignal = null;
+            if (networkPolicyF != null) {
+                networkPolicyInitReadySignal = networkPolicyF
+                        .networkScoreAndNetworkManagementServiceReady();
+            }
+            // 一系列的 systemReady() 通知
+            traceEnd();
+            traceBeginAndSlog("MakeIpSecServiceReady");
+            try {
+                if (ipSecServiceF != null) {
+                    ipSecServiceF.systemReady();
+                }
+            } catch (Throwable e) {
+                reportWtf("making IpSec Service ready", e);
+            }
+            traceEnd();
+            traceBeginAndSlog("MakeNetworkStatsServiceReady");
+            try {
+                if (networkStatsF != null) {
+                    networkStatsF.systemReady();
+                }
+            } catch (Throwable e) {
+                reportWtf("making Network Stats Service ready", e);
+            }
+            traceEnd();
+            traceBeginAndSlog("MakeConnectivityServiceReady");
+            try {
+                if (connectivityF != null) {
+                    connectivityF.systemReady();
+                }
+            } catch (Throwable e) {
+                reportWtf("making Connectivity Service ready", e);
+            }
+            traceEnd();
+            traceBeginAndSlog("MakeNetworkPolicyServiceReady");
+            try {
+                if (networkPolicyF != null) {
+                    networkPolicyF.systemReady(networkPolicyInitReadySignal);
+                }
+            } catch (Throwable e) {
+                reportWtf("making Network Policy Service ready", e);
+            }
+            traceEnd();
+
+            // Wait for all packages to be prepared
+            mPackageManagerService.waitForAppDataPrepared();
+
+            // It is now okay to let the various system services start their
+            // third party code...
+            traceBeginAndSlog("PhaseThirdPartyAppsCanStart");
+            // confirm webview completion before starting 3rd party
+            if (webviewPrep != null) {
+                ConcurrentUtils.waitForFutureNoInterrupt(webviewPrep, WEBVIEW_PREPARATION);
+            }
+            // 阶段600 在此阶段后，系统服务可以去启动/绑定第三方的 app了。
+            //同时 app 也可以发起binder调用了 
+            mSystemServiceManager.startBootPhase(
+                    SystemService.PHASE_THIRD_PARTY_APPS_CAN_START);
+            traceEnd();
+
+            traceBeginAndSlog("StartNetworkStack");
+            try {
+                // Note : the network stack is creating on-demand objects that need to send
+                // broadcasts, which means it currently depends on being started after
+                // ActivityManagerService.mSystemReady and ActivityManagerService.mProcessesReady
+                // are set to true. Be careful if moving this to a different place in the
+                // startup sequence.
+                NetworkStackClient.getInstance().start(context);
+            } catch (Throwable e) {
+                reportWtf("starting Network Stack", e);
+            }
+            traceEnd();
+
+            traceBeginAndSlog("MakeLocationServiceReady");
+            try {
+                if (locationF != null) {
+                    locationF.systemRunning();
+                }
+            } catch (Throwable e) {
+                reportWtf("Notifying Location Service running", e);
+            }
+            traceEnd();
+            traceBeginAndSlog("MakeCountryDetectionServiceReady");
+            try {
+                if (countryDetectorF != null) {
+                    countryDetectorF.systemRunning();
+                }
+            } catch (Throwable e) {
+                reportWtf("Notifying CountryDetectorService running", e);
+            }
+            traceEnd();
+            traceBeginAndSlog("MakeNetworkTimeUpdateReady");
+            try {
+                if (networkTimeUpdaterF != null) {
+                    networkTimeUpdaterF.systemRunning();
+                }
+            } catch (Throwable e) {
+                reportWtf("Notifying NetworkTimeService running", e);
+            }
+            traceEnd();
+            traceBeginAndSlog("MakeInputManagerServiceReady");
+            try {
+                // TODO(BT) Pass parameter to input manager
+                if (inputManagerF != null) {
+                    inputManagerF.systemRunning();
+                }
+            } catch (Throwable e) {
+                reportWtf("Notifying InputManagerService running", e);
+            }
+            traceEnd();
+            traceBeginAndSlog("MakeTelephonyRegistryReady");
+            try {
+                if (telephonyRegistryF != null) {
+                    telephonyRegistryF.systemRunning();
+                }
+            } catch (Throwable e) {
+                reportWtf("Notifying TelephonyRegistry running", e);
+            }
+            traceEnd();
+            traceBeginAndSlog("MakeMediaRouterServiceReady");
+            try {
+                if (mediaRouterF != null) {
+                    mediaRouterF.systemRunning();
+                }
+            } catch (Throwable e) {
+                reportWtf("Notifying MediaRouterService running", e);
+            }
+            traceEnd();
+            traceBeginAndSlog("MakeMmsServiceReady");
+            try {
+                if (mmsServiceF != null) {
+                    mmsServiceF.systemRunning();
+                }
+            } catch (Throwable e) {
+                reportWtf("Notifying MmsService running", e);
+            }
+            traceEnd();
+
+            traceBeginAndSlog("IncidentDaemonReady");
+            try {
+                // TODO: Switch from checkService to getService once it's always
+                // in the build and should reliably be there.
+                final IIncidentManager incident = IIncidentManager.Stub.asInterface(
+                        ServiceManager.getService(Context.INCIDENT_SERVICE));
+                if (incident != null) {
+                    incident.systemRunning();
+                }
+            } catch (Throwable e) {
+                reportWtf("Notifying incident daemon running", e);
+            }
+            traceEnd();
+        }, BOOT_TIMINGS_TRACE_LOG);
+ }
+```
+
+包含两个阶段： PHASE_ACTIVITY_MANAGER_READY
+
+PHASE_ACTIVITY_MANAGER_READY
+
+在AMS初始完成后，会在 startOtherServices()中调用 ams的 systemReady() 。
+
+先执行下面的代码，然后执行上面的代码。
 
 ```
 public void systemReady(final Runnable goingCallback, TimingsTraceLog traceLog) {
@@ -827,7 +1083,7 @@ public void systemReady(final Runnable goingCallback, TimingsTraceLog traceLog) 
 
             mLocalDeviceIdleController
                     = LocalServices.getService(DeviceIdleController.LocalService.class);
-                    //2 调用一系列服务的 onSystemReady()
+             //2 调用一系列服务的 onSystemReady()
             mActivityTaskManager.onSystemReady();
             // Make sure we have the current profile info, since it is needed for security checks.
             mUserController.onSystemReady();
@@ -842,7 +1098,7 @@ public void systemReady(final Runnable goingCallback, TimingsTraceLog traceLog) 
                     .getSerial();
         } catch (RemoteException e) {}
 
-        ArrayList<ProcessRecord> procsToKill = null;
+        ArrayList<ProcessRecord> procsToKill = null; // 准备要杀死的进程列表
         synchronized(mPidsSelfLocked) {
             //3  mPidsSelfLocked 保存了所以运行中的进程
             for (int i=mPidsSelfLocked.size()-1; i>=0; i--) {
@@ -856,13 +1112,12 @@ public void systemReady(final Runnable goingCallback, TimingsTraceLog traceLog) 
                 }
             }
         }
-
+         // 杀掉列表中的进程
         synchronized(this) {
             if (procsToKill != null) {
                 for (int i=procsToKill.size()-1; i>=0; i--) {
                     ProcessRecord proc = procsToKill.get(i);
                     Slog.i(TAG, "Removing system update proc: " + proc);
-                    // 开始杀掉列表中的进程
                     mProcessList.removeProcessLocked(proc, true, false, "system update done");
                 }
             }
@@ -870,7 +1125,8 @@ public void systemReady(final Runnable goingCallback, TimingsTraceLog traceLog) 
             // Now that we have cleaned up any update processes, we
             // are ready to start launching real processes and know that
             // we won't trample on them any more.
-            mProcessesReady = true;
+            // 至此，system 进程启动完毕
+            mProcessesReady = true; 
         }
 
         Slog.i(TAG, "System now ready");
@@ -1001,238 +1257,6 @@ public void systemReady(final Runnable goingCallback, TimingsTraceLog traceLog) 
             traceLog.traceEnd(); // PhaseActivityManagerReady
         }
     }
-```
-
-### 2.3.4  systemReady()
-
-callback ：
-
-```
-mActivityManagerService.systemReady(() -> {
-            Slog.i(TAG, "Making services ready");
-            traceBeginAndSlog("StartActivityManagerReadyPhase");
-            // startBootPhase
-            mSystemServiceManager.startBootPhase(
-                    SystemService.PHASE_ACTIVITY_MANAGER_READY);
-            traceEnd();
-            traceBeginAndSlog("StartObservingNativeCrashes");
-            // native crash 监听
-            try {
-                mActivityManagerService.startObservingNativeCrashes();
-            } catch (Throwable e) {
-                reportWtf("observing native crashes", e);
-            }
-            traceEnd();
-
-            // No dependency on Webview preparation in system server. But this should
-            // be completed before allowing 3rd party
-            final String WEBVIEW_PREPARATION = "WebViewFactoryPreparation";
-            // 为把view 准备
-            Future<?> webviewPrep = null;
-            if (!mOnlyCore && mWebViewUpdateService != null) {
-                webviewPrep = SystemServerInitThreadPool.get().submit(() -> {
-                    Slog.i(TAG, WEBVIEW_PREPARATION);
-                    TimingsTraceLog traceLog = new TimingsTraceLog(
-                            SYSTEM_SERVER_TIMING_ASYNC_TAG, Trace.TRACE_TAG_SYSTEM_SERVER);
-                    traceLog.traceBegin(WEBVIEW_PREPARATION);
-                    ConcurrentUtils.waitForFutureNoInterrupt(mZygotePreload, "Zygote preload");
-                    mZygotePreload = null;
-                    mWebViewUpdateService.prepareWebViewInSystemServer();
-                    traceLog.traceEnd();
-                }, WEBVIEW_PREPARATION);
-            }
-
-            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
-                traceBeginAndSlog("StartCarServiceHelperService");
-                mSystemServiceManager.startService(CAR_SERVICE_HELPER_SERVICE_CLASS);
-                traceEnd();
-            }
-
-            traceBeginAndSlog("StartSystemUI");
-            try {
-            // 系统ui启动
-                startSystemUi(context, windowManagerF);
-            } catch (Throwable e) {
-                reportWtf("starting System UI", e);
-            }
-            traceEnd();
-            // Enable airplane mode in safe mode. setAirplaneMode() cannot be called
-            // earlier as it sends broadcasts to other services.
-            // TODO: This may actually be too late if radio firmware already started leaking
-            // RF before the respective services start. However, fixing this requires changes
-            // to radio firmware and interfaces.
-            if (safeMode) {
-                traceBeginAndSlog("EnableAirplaneModeInSafeMode");
-                try {
-                    connectivityF.setAirplaneMode(true);
-                } catch (Throwable e) {
-                    reportWtf("enabling Airplane Mode during Safe Mode bootup", e);
-                }
-                traceEnd();
-            }
-            traceBeginAndSlog("MakeNetworkManagementServiceReady");
-            try {
-                if (networkManagementF != null) {
-                    // 网络管理  systemReady
-                    networkManagementF.systemReady();
-                }
-            } catch (Throwable e) {
-                reportWtf("making Network Managment Service ready", e);
-            }
-            CountDownLatch networkPolicyInitReadySignal = null;
-            if (networkPolicyF != null) {
-                networkPolicyInitReadySignal = networkPolicyF
-                        .networkScoreAndNetworkManagementServiceReady();
-            }
-            traceEnd();
-            traceBeginAndSlog("MakeIpSecServiceReady");
-            try {
-                if (ipSecServiceF != null) {
-                    ipSecServiceF.systemReady();
-                }
-            } catch (Throwable e) {
-                reportWtf("making IpSec Service ready", e);
-            }
-            traceEnd();
-            traceBeginAndSlog("MakeNetworkStatsServiceReady");
-            try {
-                if (networkStatsF != null) {
-                    networkStatsF.systemReady();
-                }
-            } catch (Throwable e) {
-                reportWtf("making Network Stats Service ready", e);
-            }
-            traceEnd();
-            traceBeginAndSlog("MakeConnectivityServiceReady");
-            try {
-                if (connectivityF != null) {
-                    connectivityF.systemReady();
-                }
-            } catch (Throwable e) {
-                reportWtf("making Connectivity Service ready", e);
-            }
-            traceEnd();
-            traceBeginAndSlog("MakeNetworkPolicyServiceReady");
-            try {
-                if (networkPolicyF != null) {
-                    networkPolicyF.systemReady(networkPolicyInitReadySignal);
-                }
-            } catch (Throwable e) {
-                reportWtf("making Network Policy Service ready", e);
-            }
-            traceEnd();
-
-            // Wait for all packages to be prepared
-            mPackageManagerService.waitForAppDataPrepared();
-
-            // It is now okay to let the various system services start their
-            // third party code...
-            traceBeginAndSlog("PhaseThirdPartyAppsCanStart");
-            // confirm webview completion before starting 3rd party
-            // 再次确保为把view
-            if (webviewPrep != null) {
-                ConcurrentUtils.waitForFutureNoInterrupt(webviewPrep, WEBVIEW_PREPARATION);
-            }
-            mSystemServiceManager.startBootPhase(
-                    SystemService.PHASE_THIRD_PARTY_APPS_CAN_START);
-            traceEnd();
-
-            traceBeginAndSlog("StartNetworkStack");
-            try {
-                // Note : the network stack is creating on-demand objects that need to send
-                // broadcasts, which means it currently depends on being started after
-                // ActivityManagerService.mSystemReady and ActivityManagerService.mProcessesReady
-                // are set to true. Be careful if moving this to a different place in the
-                // startup sequence.
-                NetworkStackClient.getInstance().start(context);
-            } catch (Throwable e) {
-                reportWtf("starting Network Stack", e);
-            }
-            traceEnd();
-
-            traceBeginAndSlog("MakeLocationServiceReady");
-            try {
-                if (locationF != null) {
-                    locationF.systemRunning();
-                }
-            } catch (Throwable e) {
-                reportWtf("Notifying Location Service running", e);
-            }
-            traceEnd();
-            traceBeginAndSlog("MakeCountryDetectionServiceReady");
-            try {
-                if (countryDetectorF != null) {
-                    countryDetectorF.systemRunning();
-                }
-            } catch (Throwable e) {
-                reportWtf("Notifying CountryDetectorService running", e);
-            }
-            traceEnd();
-            traceBeginAndSlog("MakeNetworkTimeUpdateReady");
-            try {
-                if (networkTimeUpdaterF != null) {
-                    networkTimeUpdaterF.systemRunning();
-                }
-            } catch (Throwable e) {
-                reportWtf("Notifying NetworkTimeService running", e);
-            }
-            traceEnd();
-            traceBeginAndSlog("MakeInputManagerServiceReady");
-            try {
-                // TODO(BT) Pass parameter to input manager
-                if (inputManagerF != null) {
-                // inputmanager 的 systemRunning()
-                    inputManagerF.systemRunning();
-                }
-            } catch (Throwable e) {
-                reportWtf("Notifying InputManagerService running", e);
-            }
-            traceEnd();
-            traceBeginAndSlog("MakeTelephonyRegistryReady");
-            try {
-                if (telephonyRegistryF != null) {
-                    telephonyRegistryF.systemRunning();
-                }
-            } catch (Throwable e) {
-                reportWtf("Notifying TelephonyRegistry running", e);
-            }
-            traceEnd();
-            traceBeginAndSlog("MakeMediaRouterServiceReady");
-            try {
-                if (mediaRouterF != null) {
-                //
-                    mediaRouterF.systemRunning();
-                }
-            } catch (Throwable e) {
-                reportWtf("Notifying MediaRouterService running", e);
-            }
-            traceEnd();
-            traceBeginAndSlog("MakeMmsServiceReady");
-            try {
-                if (mmsServiceF != null) {
-                    mmsServiceF.systemRunning();
-                }
-            } catch (Throwable e) {
-                reportWtf("Notifying MmsService running", e);
-            }
-            traceEnd();
-
-            traceBeginAndSlog("IncidentDaemonReady");
-            try {
-                // TODO: Switch from checkService to getService once it's always
-                // in the build and should reliably be there.
-                final IIncidentManager incident = IIncidentManager.Stub.asInterface(
-                        ServiceManager.getService(Context.INCIDENT_SERVICE));
-                if (incident != null) {
-                    incident.systemRunning();
-                }
-            } catch (Throwable e) {
-                reportWtf("Notifying incident daemon running", e);
-            }
-            traceEnd();
-        }, BOOT_TIMINGS_TRACE_LOG);
-    }
-
 ```
 
 # 参考

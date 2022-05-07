@@ -1,14 +1,15 @@
 Watchdog 机制
-
 https://www.jianshu.com/p/d9eeb0d4eab9
 
 PMS
 
 WMS
 
-context：
+inputManager
 
-深入理解 ClientLifecycleManager 机制:
+context： 基本差不多了
+
+## 深入理解 ClientLifecycleManager 机制:
 
 https://blog.csdn.net/liuwg1226/article/details/116063863
 
