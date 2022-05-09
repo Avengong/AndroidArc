@@ -19,4 +19,8 @@ systemServer 中的 UiThread
  super("android.ui", Process.THREAD_PRIORITY_FOREGROUND, false /*allowIo*/);
 ```
 
+# aa
+
 ActivityRecord ServiceRecord contentProvideRecord broadcastRecord ProcessRecord
+
+## 屏幕信息 display 
