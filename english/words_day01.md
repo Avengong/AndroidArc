@@ -123,7 +123,7 @@ he is a doctor. a doctor 名词做表语。 状态型谓语就是： is a doctor
 
 介词短语： in +名词。表示位置。可以做表语。加上be动词变成了状态型谓语。
 
-i am in guangdong。 she is in hunan。
+i am in guangdong。 she is in HuNan。
 
 # 四、宾语
 
