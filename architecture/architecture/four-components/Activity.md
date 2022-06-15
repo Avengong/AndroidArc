@@ -1,5 +1,48 @@
 # AMS中的一些概念
 
+```
+
+ActivityStackSupervisor state:
+  topDisplayFocusedStack=Task{acf637 #10 visible=false type=standard mode=fullscreen translucent=true A=10054:com.android.documentsui U=0 StackId=10 sz=2}
+  mLastOrientationSource=ActivityRecord{87bbf5b u0 com.android.documentsui/.files.FilesActivity t10}
+  Display: mDisplayId=0 stacks=4
+    init=1080x2340 440dpi cur=1080x2340 app=1080x2072 rng=1080x1003-2072x2072
+    deferred=false mLayoutNeeded=false mTouchExcludeRegion=SkRegion((0,0,1080,2340))
+
+  mLayoutSeq=340
+  mCurrentFocus=Window{6bbd515 u0 com.android.packageinstaller/com.android.packageinstaller.InstallStaging}
+  mFocusedApp=ActivityRecord{afdf8a0 u0 com.android.packageinstaller/.InstallStaging t10}
+  mLastStatusBarVisibility=0x8008
+
+  displayId=0
+  mWallpaperTarget=null
+  mLastWallpaperX=0.33333334 mLastWallpaperY=0.5
+/
+  Task display areas in top down Z order:
+    TaskDisplayArea DefaultTaskDisplayArea
+      mLastOrientationSource=Task{acf637 #10 visible=false type=standard mode=fullscreen translucent=true A=10054:com.android.documentsui U=0 StackId=10 sz=2}
+      mPreferredTopFocusableStack=Task{acf637 #10 visible=false type=standard mode=fullscreen translucent=true A=10054:com.android.documentsui U=0 StackId=10 sz=2}
+      mLastFocusedStack=Task{acf637 #10 visible=false type=standard mode=fullscreen translucent=true A=10054:com.android.documentsui U=0 StackId=10 sz=2}
+      Application tokens in top down Z order:
+      * Task{acf637 #10 visible=false type=standard mode=fullscreen translucent=true A=10054:com.android.documentsui U=0 StackId=10 sz=2}
+        mLastOrientationSource=ActivityRecord{87bbf5b u0 com.android.documentsui/.files.FilesActivity t10}
+        bounds=[0,0][1080,2340]
+        * ActivityRecord{afdf8a0 u0 com.android.packageinstaller/.InstallStaging t10}
+        * ActivityRecord{87bbf5b u0 com.android.documentsui/.files.FilesActivity t10}
+      * Task{ad52da0 #1 visible=false type=home mode=fullscreen translucent=true I=com.android.launcher3/.uioverrides.QuickstepLauncher U=0 StackId=1 sz=1}
+        mLastOrientationSource=Task{7e0ec2a #8 visible=true type=home mode=fullscreen translucent=false I=com.android.launcher3/.uioverrides.QuickstepLauncher U=0 StackId=1 sz=1}
+        bounds=[0,0][1080,2340]
+        * Task{7e0ec2a #8 visible=true type=home mode=fullscreen translucent=false I=com.android.launcher3/.uioverrides.QuickstepLauncher U=0 StackId=1 sz=1}
+          mLastOrientationSource=ActivityRecord{4c22c1e u0 com.android.launcher3/.uioverrides.QuickstepLauncher t8}
+          bounds=[0,0][1080,2340]
+          * ActivityRecord{4c22c1e u0 com.android.launcher3/.uioverrides.QuickstepLauncher t8}
+      * Task{b080acc #4 visible=false type=undefined mode=split-screen-primary translucent=true ?? U=0 StackId=4 sz=0}
+        bounds=[0,0][1080,1158]
+      * Task{13d9a1b #5 visible=false type=undefined mode=split-screen-secondary translucent=true ?? U=0 StackId=5 sz=0}
+        bounds=[0,1186][1080,2340]
+
+```
+
 ## Activity
 
 一个屏幕对应一个activityDisplay。里面包含多个activityStack。
