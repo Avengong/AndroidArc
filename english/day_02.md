@@ -19,9 +19,9 @@
 
 有些及物动词可以接两个宾语。 一个叫直接宾语，另一个叫间接宾语。 必须表示人的叫间接宾语、表示物的叫直接宾语。
 
-i gave her a book. ---可以缓过来，但是要加to： i gave a book to her. i gave them books.
+i gave her a book. ---可以换过来，但是要加to： i gave a book to her. i gave them books.
 
-she lent me her bike. she sent her bike to me.
+she lent me her bike. she lent her bike to me.
 
 注意： 能带两个宾语的及物动词，称为 "双宾动词"。不是所有的动词都可以加两个宾语。 常见的有： 去查询！
 
