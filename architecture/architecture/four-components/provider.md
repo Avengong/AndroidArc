@@ -1,0 +1,32 @@
+用来启动provider的流程：
+
+```
+ at android.app.ActivityThread.installProvider(ActivityThread.java:7574)
+        at android.app.ActivityThread.installContentProviders(ActivityThread.java:7092)
+        at android.app.ActivityThread.handleBindApplication(ActivityThread.java:6981)
+        at android.app.ActivityThread.access$1700(ActivityThread.java:274)
+        at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2098)
+        at android.os.Handler.dispatchMessage(Handler.java:106)
+        at android.os.Looper.loop(Looper.java:233)
+        at android.app.ActivityThread.main(ActivityThread.java:8035)
+        at java.lang.reflect.Method.invoke(Native Method)
+        at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:631)
+        at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:978)
+     Caused by: java.lang.ClassNotFoundException: Didn't find class "com.umeng.message.provider.MessageProvider" on path: DexPathList[[zip file "/data/app/~~JZWkdJfuaXdnRMqlKkUW_w==/com.dysdk.lib.dypush-HSpCXnOymdewaI524sRnzA==/base.apk"],nativeLibraryDirectories=[/data/app/~~JZWkdJfuaXdnRMqlKkUW_w==/com.dysdk.lib.dypush-HSpCXnOymdewaI524sRnzA==/lib/arm, /data/app/~~JZWkdJfuaXdnRMqlKkUW_w==/com.dysdk.lib.dypush-HSpCXnOymdewaI524sRnzA==/base.apk!/lib/armeabi-v7a, /system/lib, /system_ext/lib]]
+        at dalvik.system.BaseDexClassLoader.findClass(BaseDexClassLoader.java:207)
+        at java.lang.ClassLoader.loadClass(ClassLoader.java:379)
+        at java.lang.ClassLoader.loadClass(ClassLoader.java:312)
+        at android.app.AppComponentFactory.instantiateProvider(AppComponentFactory.java:147)
+        at androidx.core.app.CoreComponentFactory.instantiateProvider(CoreComponentFactory.java:62)
+        at android.app.ActivityThread.installProvider(ActivityThread.java:7558)
+        at android.app.ActivityThread.installContentProviders(ActivityThread.java:7092) 
+        at android.app.ActivityThread.handleBindApplication(ActivityThread.java:6981) 
+        at android.app.ActivityThread.access$1700(ActivityThread.java:274) 
+        at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2098) 
+        at android.os.Handler.dispatchMessage(Handler.java:106) 
+        at android.os.Looper.loop(Looper.java:233) 
+        at android.app.ActivityThread.main(ActivityThread.java:8035) 
+        at java.lang.reflect.Method.invoke(Native Method) 
+        at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:631) 
+        at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:978) 
+```

@@ -1,3 +1,26 @@
+# 一些思路
+
+从数据流的角度来分析： activity--ActivityClientRecord--activityRecord--activityinfo--activity
+app端发起一个activity启动请求，到AMS。这其中的对于activity数据的封装是怎么样变化的？ 进程内 以及 进程间activity是如何传递数据的？ 从而引出了数据结构。。
+
+# app测：
+
+intent activity ActivityClientRecord ActivityResult 启动结果
+
+# AMS测：
+
+ResolveInfo 通过activitySuperVisor-AMS-PMS的接口 resolveIntent(),得到intent对应的component解析信息。
+里面包含了activityInfo、 serviceInfo、broadcastInfo、providerInfo、intent-filter等。
+
+ActivityInfo 从iResolveInfo 中获取要启动activity的信息。
+
+Display 一个对应一个 ActivityStackSuperVisor ActivityStackSuperVisor 栈式管理多个 ActivityStack ActivityStack
+栈式管理多个 TaskRecord TaskRecord 栈式管理多个 ActivityRecord
+
+## 疑问
+
+Activity中的 Activity mParent 成员变量 是啥？
+
 # AMS中的一些概念
 
 ```
@@ -47,13 +70,13 @@ ActivityStackSupervisor state:
 
 一个屏幕对应一个activityDisplay。里面包含多个activityStack。
 
-一个ActivityStack 对应一个进程，里面可能有多个TaskRecord。一个TaskRecord对应一个栈。
+一个ActivityStack 里面可能有多个TaskRecord。一个TaskRecord对应一个栈。
 
 TaskRecord里面有很多activities。一个activity对应一个activityRecord。
 
 ## ProcessRecord
 
-ProcessRecord 包含了一个进程中所以的activityRecord，不同的TaskRecord中的activityRecord可能属于同一个ProcessRecord。
+ProcessRecord 包含了一个进程中所有的activityRecord，不同TaskRecord中的activityRecord可能属于同一个ProcessRecord。
 为甚？因为一个进程可以开辟多个activity栈，也就是多个TaskRecord。如 利用singleInstance启动模式。那么就有两个栈。
 
 ## 可以验证以上的关系吗？ 特别是activityStack??
@@ -564,6 +587,10 @@ InstallParams： MultiPackageInstallParams:
 
 # 启动流程
 
+# App侧
+
+# AMS侧
+
 ## Activity.java
 
 ```
@@ -587,10 +614,11 @@ InstallParams： MultiPackageInstallParams:
 ```
 public void startActivityForResult(@RequiresPermission Intent intent, int requestCode,
         @Nullable Bundle options) {
-    if (mParent == null) {
+    if (mParent == null) { // mParent一直为空 ，走该分支
         options = transferSpringboardActivityOptions(options);
         Instrumentation.ActivityResult ar =
             mInstrumentation.execStartActivity(
+                  //      1 传入参数 
                 this, mMainThread.getApplicationThread(), mToken, this,
                 intent, requestCode, options);
         if (ar != null) {
@@ -612,18 +640,17 @@ public void startActivityForResult(@RequiresPermission Intent intent, int reques
         cancelInputsAndStartExitTransition(options);
         // TODO Consider clearing/flushing other event sources and events for child windows.
     } else {
-        if (options != null) {
-            mParent.startActivityFromChild(this, intent, requestCode, options);
-        } else {
-            // Note we want to go through this method for compatibility with
-            // existing applications that may have overridden it.
-            mParent.startActivityFromChild(this, intent, requestCode);
-        }
+       ...
     }
 }
 ```
 
+ActivityResult 启动结果 mMainThread 是 ActivityThread 对象。 mToken IBinder对象。 应该是跟AMS测的ActivityRecord
+保持跨进程对应的的一个标识？？？？？？todo getApplicationThread 是 ActivityThread 静态内部类对象 ApplicationThread 。
+
 # Instrumentation.execStartActivity
+
+Instrumentation 到底是干啥的？ 引导类？？
 
 ```
   public ActivityResult execStartActivity(
@@ -675,19 +702,41 @@ public void startActivityForResult(@RequiresPermission Intent intent, int reques
     }
 ```
 
-简简单单的一个binder请求。到atm侧： Android 10 已经把 activity相关的逻辑都转移到了atm中。 疑问： token到底是啥？ 用来干什么？
+List<ActivityMonitor> mActivityMonitors;是什么东西？？ todo Context who： 正在启动activity是从哪个context过来的 IBinder
+contextThread ： 启动activity的context所在的主线程 IBinder token：
+system系统内部Activity的唯一凭证，表示谁正在启动activity，可以为null。如：从service的context中启动activity。 Activity target：
+哪一个activity正在启动activity(可以理解为接收结果的target activity)。可能为null，如从service中启动。跟上一个的区别？？ 前者是系统，后者是app侧。
+Intent intent： 实际要启动的intent。 int requestCode： 请求码，用来定义启动结果的唯一凭证。如果不需要启动结果，那么设置为负数。 Bundle options ：
+附加参数。
+
+简简单单的一个binder请求。到atm侧： Android 10 已经把 activity相关的逻辑都转移到了atm中。
+
+疑问：
+
+1. token到底是啥？ 用来干什么？ 答： token就是表示系统中谁在启动activity。
+
+ActivityTaskManager 位于app侧，通过binder跨进程调用到 AMS的 atm(ActivityManagerService)中。
+
+2. IActivityManager 和 IActivityTaskManager 什么关系？ IActivityManager 是AMS实现的接口。 IActivityTaskManager
+   是ATM实现的接口。
+
+# AMS侧
 
 ```
-    @Override
-    public final int startActivity(IApplicationThread caller, String callingPackage,
-            Intent intent, String resolvedType, IBinder resultTo, String resultWho, int requestCode,
-            int startFlags, ProfilerInfo profilerInfo, Bundle bOptions) {
-            // startFlags=0；profileinfo=null；
-        return startActivityAsUser(caller, callingPackage, intent, resolvedType, resultTo,
-                resultWho, requestCode, startFlags, profilerInfo, bOptions,
-                UserHandle.getCallingUserId()); // 添加了userid参数
-    }
+ @Override
+ public final int startActivity(IApplicationThread caller, String callingPackage,
+         Intent intent, String resolvedType, IBinder resultTo, String resultWho, int requestCode,
+         int startFlags, ProfilerInfo profilerInfo, Bundle bOptions) {
+         // startFlags=0；profileinfo=null；
+     return startActivityAsUser(caller, callingPackage, intent, resolvedType, resultTo,
+             resultWho, requestCode, startFlags, profilerInfo, bOptions,
+             UserHandle.getCallingUserId()); // 添加了userid参数
+ }
 ```
+
+caller 表示是哪个app侧调用的。 applicationThread 本身就是一个binder服务。  
+callingPackage 启动的包名 resultTo IBinder 对象。 就是app传递过来的 token 表示启动者，同时也是结果接受者。 resultWho string 类型
+target.mEmbeddedID。 也是启动者。 profilerInfo : null
 
 ```
 
@@ -702,17 +751,19 @@ public void startActivityForResult(@RequiresPermission Intent intent, int reques
 
 ```
 
+userId: 当前用户id。Android支持多用户。
 ```
  int startActivityAsUser(IApplicationThread caller, String callingPackage,
             Intent intent, String resolvedType, IBinder resultTo, String resultWho, int requestCode,
             int startFlags, ProfilerInfo profilerInfo, Bundle bOptions, int userId,
             boolean validateIncomingUser) {
         enforceNotIsolatedCaller("startActivityAsUser");
-
+        // 检测发起者用户是否合法？
         userId = getActivityStartController().checkTargetUser(userId, validateIncomingUser,
                 Binder.getCallingPid(), Binder.getCallingUid(), "startActivityAsUser");
 
         // TODO: Switch to user app stacks here.
+        // 在这里切换app的栈
         return getActivityStartController().obtainStarter(intent, "startActivityAsUser")
                 .setCaller(caller)
                 .setCallingPackage(callingPackage)
@@ -723,19 +774,34 @@ public void startActivityForResult(@RequiresPermission Intent intent, int reques
                 .setStartFlags(startFlags)
                 .setProfilerInfo(profilerInfo)
                 .setActivityOptions(bOptions)
-                .setMayWait(userId) //这个很关键
+                //这个很关键 
+                .setMayWait(userId) 
                 .execute();
 
     }
 ```
 
-# ActivityStack.execute()
+```
+ // 设置maywait属性为true 
+ ActivityStarter setMayWait(int userId) {
+     mRequest.mayWait = true;
+     mRequest.userId = userId;
+
+     return this;
+ }
+```
+
+ActivityStartController.obtainStarter() 返回一个 ActivityStarter启动器。用来执行execute()方法，一旦执行完毕就不应该修改了。
+ActivityStarter 启动器。 调用了一些列的set方法往 ActivityStarter 的成员变量 mRequest中设置参数。把app传递过来的参数，封装到了mRequest对象。
+
+# ActivityStarter.execute()
 
 ```
  int execute() {
         try {
             // TODO(b/64750076): Look into passing request directly to these methods to allow
             // for transactional diffs and preprocessing.
+            // 在上一步的set方法中 
             if (mRequest.mayWait) {
             // 走这个分支
                 return startActivityMayWait(mRequest.caller, mRequest.callingUid,
@@ -765,6 +831,138 @@ public void startActivityForResult(@RequiresPermission Intent intent, int reques
         }
     }
 ```
+
+把启动activity的所有信息封装到了一个 mRequest 中，开始启动。 为什么要叫 maywait？ 因为启动时候activity所在的进程不一定已经被拉起。
+
+# startActivityMayWait()
+
+```
+ private int startActivityMayWait(IApplicationThread caller, int callingUid,
+            String callingPackage, int requestRealCallingPid, int requestRealCallingUid,
+            Intent intent, String resolvedType, IVoiceInteractionSession voiceSession,
+            IVoiceInteractor voiceInteractor, IBinder resultTo, String resultWho, int requestCode,
+            int startFlags, ProfilerInfo profilerInfo, WaitResult outResult,
+            Configuration globalConfig, SafeActivityOptions options, boolean ignoreTargetSecurity,
+            int userId, TaskRecord inTask, String reason,
+            boolean allowPendingRemoteAnimationRegistryLookup,
+            PendingIntentRecord originatingPendingIntent, boolean allowBackgroundActivityStart) {
+        // Refuse possible leaked file descriptors
+        if (intent != null && intent.hasFileDescriptors()) {
+            throw new IllegalArgumentException("File descriptors passed in Intent");
+        }
+        mSupervisor.getActivityMetricsLogger().notifyActivityLaunching(intent);
+        boolean componentSpecified = intent.getComponent() != null;
+
+        final int realCallingPid = requestRealCallingPid != Request.DEFAULT_REAL_CALLING_PID
+                ? requestRealCallingPid
+                : Binder.getCallingPid();
+        final int realCallingUid = requestRealCallingUid != Request.DEFAULT_REAL_CALLING_UID
+                ? requestRealCallingUid
+                : Binder.getCallingUid();
+
+        int callingPid;
+        if (callingUid >= 0) {
+            callingPid = -1;
+        } else if (caller == null) {
+            callingPid = realCallingPid;
+            callingUid = realCallingUid;
+        } else {
+            callingPid = callingUid = -1;
+        }
+
+        // Save a copy in case ephemeral needs it
+        // 拷贝保存一份临时intent
+        final Intent ephemeralIntent = new Intent(intent);
+        // Don't modify the client's object!
+        // 要修改的话，我们创建一份新的intent
+        intent = new Intent(intent);
+        if (componentSpecified
+                && !(Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() == null)
+                && !Intent.ACTION_INSTALL_INSTANT_APP_PACKAGE.equals(intent.getAction())
+                && !Intent.ACTION_RESOLVE_INSTANT_APP_PACKAGE.equals(intent.getAction())
+                && mService.getPackageManagerInternalLocked()
+                        .isInstantAppInstallerComponent(intent.getComponent())) {
+            // intercept intents targeted directly to the ephemeral installer the
+            // ephemeral installer should never be started with a raw Intent; instead
+            // adjust the intent so it looks like a "normal" instant app launch
+            intent.setComponent(null /*component*/);
+            componentSpecified = false;
+        }
+        // 2 根据intent最终通过PMS去获取 ActivityInfo 
+        ResolveInfo rInfo = mSupervisor.resolveIntent(intent, resolvedType, userId,
+                0 /* matchFlags */,
+                        computeResolveFilterUid(
+                                callingUid, realCallingUid, mRequest.filterCallingUid));
+        if (rInfo == null) {
+           ...
+        }
+        // Collect information about the target of the Intent.
+        ActivityInfo aInfo = mSupervisor.resolveActivity(intent, rInfo, startFlags, profilerInfo);
+
+        synchronized (mService.mGlobalLock) {
+            // 3 从display屏幕中获取顶层的ActivityStack 
+            final ActivityStack stack = mRootActivityContainer.getTopDisplayFocusedStack();
+            stack.mConfigWillChange = globalConfig != null
+                    && mService.getGlobalConfiguration().diff(globalConfig) != 0;
+            
+
+            final long origId = Binder.clearCallingIdentity();
+
+            if (aInfo != null &&
+                    (aInfo.applicationInfo.privateFlags
+                            & ApplicationInfo.PRIVATE_FLAG_CANT_SAVE_STATE) != 0 &&
+                    mService.mHasHeavyWeightFeature) {
+                // This may be a heavy-weight process!  Check to see if we already
+                // have another, different heavy-weight process running.
+                ...
+                }
+            }
+
+            final ActivityRecord[] outRecord = new ActivityRecord[1];
+            int res = startActivity(caller, intent, ephemeralIntent, resolvedType, aInfo, rInfo,
+                    voiceSession, voiceInteractor, resultTo, resultWho, requestCode, callingPid,
+                    callingUid, callingPackage, realCallingPid, realCallingUid, startFlags, options,
+                    ignoreTargetSecurity, componentSpecified, outRecord, inTask, reason,
+                    allowPendingRemoteAnimationRegistryLookup, originatingPendingIntent,
+                    allowBackgroundActivityStart);
+
+            Binder.restoreCallingIdentity(origId);
+
+            if (stack.mConfigWillChange) {
+                // If the caller also wants to switch to a new configuration,
+                // do so now.  This allows a clean switch, as we are waiting
+                // for the current activity to pause (so we will not destroy
+                // it), and have not yet started the next activity.
+                mService.mAmInternal.enforceCallingPermission(android.Manifest.permission.CHANGE_CONFIGURATION,
+                        "updateConfiguration()");
+                stack.mConfigWillChange = false;
+                if (DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION,
+                        "Updating to new configuration after starting activity.");
+                mService.updateConfigurationLocked(globalConfig, null, false);
+            }
+
+
+         }
+
+}
+
+```
+
+mRequest 中 TaskRecord 什么时候赋值的？
+
+ResolveInfo 通过activitySuperVisor-AMS-PMS的接口 resolveIntent(),得到intent对应的component解析信息。
+里面包含了activityInfo、 serviceInfo、broadcastInfo、providerInfo、intent-filter等。
+
+一个 ResolveInfo 只包含一个组件的信息。此处是 ActivityInfo。
+
+ActivityInfo 从iResolveInfo 中获取要启动activity的信息。
+
+
+
+
+
+
+
 
 
 
