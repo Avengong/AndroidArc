@@ -645,8 +645,11 @@ public void startActivityForResult(@RequiresPermission Intent intent, int reques
 }
 ```
 
-ActivityResult 启动结果 mMainThread 是 ActivityThread 对象。 mToken IBinder对象。 应该是跟AMS测的ActivityRecord
-保持跨进程对应的的一个标识？？？？？？todo getApplicationThread 是 ActivityThread 静态内部类对象 ApplicationThread 。
+ActivityResult 启动结果 mMainThread 是 ActivityThread 对象。
+
+mToken IBinder对象。 应该是跟AMS测的ActivityRecord 保持跨进程对应的的一个标识？？？？？？todo
+
+getApplicationThread 是 ActivityThread 静态内部类对象 ApplicationThread 。
 
 # Instrumentation.execStartActivity
 
@@ -834,6 +837,7 @@ ActivityStarter 启动器。 调用了一些列的set方法往 ActivityStarter �
 
 把启动activity的所有信息封装到了一个 mRequest 中，开始启动。 为什么要叫 maywait？ 因为启动时候activity所在的进程不一定已经被拉起。
 
+> ActivityStarter.java
 # startActivityMayWait()
 
 ```
@@ -846,79 +850,36 @@ ActivityStarter 启动器。 调用了一些列的set方法往 ActivityStarter �
             int userId, TaskRecord inTask, String reason,
             boolean allowPendingRemoteAnimationRegistryLookup,
             PendingIntentRecord originatingPendingIntent, boolean allowBackgroundActivityStart) {
-        // Refuse possible leaked file descriptors
-        if (intent != null && intent.hasFileDescriptors()) {
-            throw new IllegalArgumentException("File descriptors passed in Intent");
-        }
-        mSupervisor.getActivityMetricsLogger().notifyActivityLaunching(intent);
-        boolean componentSpecified = intent.getComponent() != null;
-
-        final int realCallingPid = requestRealCallingPid != Request.DEFAULT_REAL_CALLING_PID
-                ? requestRealCallingPid
-                : Binder.getCallingPid();
-        final int realCallingUid = requestRealCallingUid != Request.DEFAULT_REAL_CALLING_UID
-                ? requestRealCallingUid
-                : Binder.getCallingUid();
-
-        int callingPid;
-        if (callingUid >= 0) {
-            callingPid = -1;
-        } else if (caller == null) {
-            callingPid = realCallingPid;
-            callingUid = realCallingUid;
-        } else {
-            callingPid = callingUid = -1;
-        }
-
+            
+          ...
+          
         // Save a copy in case ephemeral needs it
         // 拷贝保存一份临时intent
         final Intent ephemeralIntent = new Intent(intent);
         // Don't modify the client's object!
         // 要修改的话，我们创建一份新的intent
         intent = new Intent(intent);
-        if (componentSpecified
-                && !(Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() == null)
-                && !Intent.ACTION_INSTALL_INSTANT_APP_PACKAGE.equals(intent.getAction())
-                && !Intent.ACTION_RESOLVE_INSTANT_APP_PACKAGE.equals(intent.getAction())
-                && mService.getPackageManagerInternalLocked()
-                        .isInstantAppInstallerComponent(intent.getComponent())) {
-            // intercept intents targeted directly to the ephemeral installer the
-            // ephemeral installer should never be started with a raw Intent; instead
-            // adjust the intent so it looks like a "normal" instant app launch
-            intent.setComponent(null /*component*/);
-            componentSpecified = false;
-        }
+         ...
         // 2 根据intent最终通过PMS去获取 ActivityInfo 
         ResolveInfo rInfo = mSupervisor.resolveIntent(intent, resolvedType, userId,
                 0 /* matchFlags */,
                         computeResolveFilterUid(
                                 callingUid, realCallingUid, mRequest.filterCallingUid));
         if (rInfo == null) {
-           ...
+           //...
         }
         // Collect information about the target of the Intent.
+        // 简单从 ResolveInfo 获取 ActivityInfo
         ActivityInfo aInfo = mSupervisor.resolveActivity(intent, rInfo, startFlags, profilerInfo);
 
         synchronized (mService.mGlobalLock) {
             // 3 从display屏幕中获取顶层的ActivityStack 
             final ActivityStack stack = mRootActivityContainer.getTopDisplayFocusedStack();
-            stack.mConfigWillChange = globalConfig != null
-                    && mService.getGlobalConfiguration().diff(globalConfig) != 0;
-            
+            //...
 
-            final long origId = Binder.clearCallingIdentity();
-
-            if (aInfo != null &&
-                    (aInfo.applicationInfo.privateFlags
-                            & ApplicationInfo.PRIVATE_FLAG_CANT_SAVE_STATE) != 0 &&
-                    mService.mHasHeavyWeightFeature) {
-                // This may be a heavy-weight process!  Check to see if we already
-                // have another, different heavy-weight process running.
-                ...
-                }
-            }
-
+            // 新建ActivityRecord 
             final ActivityRecord[] outRecord = new ActivityRecord[1];
+            
             int res = startActivity(caller, intent, ephemeralIntent, resolvedType, aInfo, rInfo,
                     voiceSession, voiceInteractor, resultTo, resultWho, requestCode, callingPid,
                     callingUid, callingPackage, realCallingPid, realCallingUid, startFlags, options,
@@ -927,20 +888,7 @@ ActivityStarter 启动器。 调用了一些列的set方法往 ActivityStarter �
                     allowBackgroundActivityStart);
 
             Binder.restoreCallingIdentity(origId);
-
-            if (stack.mConfigWillChange) {
-                // If the caller also wants to switch to a new configuration,
-                // do so now.  This allows a clean switch, as we are waiting
-                // for the current activity to pause (so we will not destroy
-                // it), and have not yet started the next activity.
-                mService.mAmInternal.enforceCallingPermission(android.Manifest.permission.CHANGE_CONFIGURATION,
-                        "updateConfiguration()");
-                stack.mConfigWillChange = false;
-                if (DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION,
-                        "Updating to new configuration after starting activity.");
-                mService.updateConfigurationLocked(globalConfig, null, false);
-            }
-
+           ...
 
          }
 
@@ -948,14 +896,1503 @@ ActivityStarter 启动器。 调用了一些列的set方法往 ActivityStarter �
 
 ```
 
-mRequest 中 TaskRecord 什么时候赋值的？
+mRequest 中 TaskRecord 什么时候赋值的？ ResolveInfo 通过activitySuperVisor-AMS-PMS的接口 resolveIntent()
+,得到intent对应的component解析信息。 里面包含了activityInfo、 serviceInfo、broadcastInfo、providerInfo、intent-filter等。
 
-ResolveInfo 通过activitySuperVisor-AMS-PMS的接口 resolveIntent(),得到intent对应的component解析信息。
-里面包含了activityInfo、 serviceInfo、broadcastInfo、providerInfo、intent-filter等。
+一个 ResolveInfo 只包含一个组件的信息。此处是 ActivityInfo。 ActivityInfo 从iResolveInfo 中获取要启动activity的信息。
 
-一个 ResolveInfo 只包含一个组件的信息。此处是 ActivityInfo。
+为什么叫mayWait？ 关键就是在 outRecord 上，
 
-ActivityInfo 从iResolveInfo 中获取要启动activity的信息。
+startActivity 内部会调用同名的方法： startActivity().
+
+> ActivityStarter.java
+
+# startActivity()
+
+```
+private int startActivity(IApplicationThread caller, Intent intent, Intent ephemeralIntent,
+            String resolvedType, ActivityInfo aInfo, ResolveInfo rInfo,
+            IVoiceInteractionSession voiceSession, IVoiceInteractor voiceInteractor,
+            IBinder resultTo, String resultWho, int requestCode, int callingPid, int callingUid,
+            String callingPackage, int realCallingPid, int realCallingUid, int startFlags,
+            SafeActivityOptions options,
+            boolean ignoreTargetSecurity, boolean componentSpecified, ActivityRecord[] outActivity,
+            TaskRecord inTask, boolean allowPendingRemoteAnimationRegistryLookup,
+            PendingIntentRecord originatingPendingIntent, boolean allowBackgroundActivityStart) {
+
+       // 1 获取调用者进程对象 ProcessRecord
+        WindowProcessController callerApp = null;
+        if (caller != null) {
+            callerApp = mService.getProcessController(caller);
+            if (callerApp != null) {
+                callingPid = callerApp.getPid();
+                callingUid = callerApp.mInfo.uid;
+            } else {
+                Slog.w(TAG, "Unable to find app for caller " + caller
+                        + " (pid=" + callingPid + ") when starting: "
+                        + intent.toString());
+                err = ActivityManager.START_PERMISSION_DENIED;
+            }
+        }    
+
+      //2 处理intent，以及 FLAG_ACTIVITY_FORWARD_RESULT 标志逻辑
+       final int launchFlags = intent.getFlags();
+
+        if ((launchFlags & Intent.FLAG_ACTIVITY_FORWARD_RESULT) != 0 && sourceRecord != null) {
+            // Transfer the result target from the source activity to the new
+            // one being started, including any failures.
+            if (requestCode >= 0) {
+                SafeActivityOptions.abort(options);
+                return ActivityManager.START_FORWARD_AND_REQUEST_CONFLICT;
+            }
+            resultRecord = sourceRecord.resultTo;
+            if (resultRecord != null && !resultRecord.isInStackLocked()) {
+                resultRecord = null;
+            }
+            resultWho = sourceRecord.resultWho;
+            requestCode = sourceRecord.requestCode;
+            sourceRecord.resultTo = null;
+            if (resultRecord != null) {
+                resultRecord.removeResultsLocked(sourceRecord, resultWho, requestCode);
+            }
+            //...
+        }
+        
+        // 3 启动权限检查
+         boolean abort = !mSupervisor.checkStartAnyActivityPermission(intent, aInfo, resultWho,
+                requestCode, callingPid, callingUid, callingPackage, ignoreTargetSecurity,
+                inTask != null, callerApp, resultRecord, resultStack);
+        abort |= !mService.mIntentFirewall.checkStartActivity(intent, callingUid,
+                callingPid, resolvedType, aInfo.applicationInfo);
+        abort |= !mService.getPermissionPolicyInternal().checkStartActivity(intent, callingUid,
+                callingPackage);
+
+        boolean restrictedBgActivity = false;
+        //... 
+        
+        // 4 创建启动activity在AMS内存中的对象  ActivityRecord 
+         ActivityRecord r = new ActivityRecord(mService, callerApp, callingPid, callingUid,
+                callingPackage, intent, resolvedType, aInfo, mService.getGlobalConfiguration(),
+                resultRecord, resultWho, requestCode, componentSpecified, voiceSession != null,
+                mSupervisor, checkedOptions, sourceRecord);
+        if (outActivity != null) {
+            // 把启动对象ar，赋值到 outActivity列表中第一个位置。
+            outActivity[0] = r;
+        }
+        // 5 继续调用另外一个 startActivity() 
+        final int res = startActivity(r, sourceRecord, voiceSession, voiceInteractor, startFlags,
+                true /* doResume */, checkedOptions, inTask, outActivity, restrictedBgActivity);
+
+}
+```
+
+总结： todo
+
+> ActivityStarter.java
+
+# startActivity()
+
+```
+ private int startActivity(final ActivityRecord r, ActivityRecord sourceRecord,
+                IVoiceInteractionSession voiceSession, IVoiceInteractor voiceInteractor,
+                int startFlags, boolean doResume, ActivityOptions options, TaskRecord inTask,
+                ActivityRecord[] outActivity, boolean restrictedBgActivity) {
+        int result = START_CANCELED;
+        final ActivityStack startedActivityStack;
+        try {
+            mService.mWindowManager.deferSurfaceLayout();
+            // 继续调用  startActivityUnchecked()
+            result = startActivityUnchecked(r, sourceRecord, voiceSession, voiceInteractor,
+                    startFlags, doResume, options, inTask, outActivity, restrictedBgActivity);
+        } finally {
+        
+        
+        }
+ }      
+```
+
+> ActivityStarter.java
+
+# startActivityUnchecked()
+
+```
+ private int startActivityUnchecked(final ActivityRecord r, ActivityRecord sourceRecord,
+            IVoiceInteractionSession voiceSession, IVoiceInteractor voiceInteractor,
+            int startFlags, boolean doResume, ActivityOptions options, TaskRecord inTask,
+            ActivityRecord[] outActivity, boolean restrictedBgActivity) {
+ 
+      // ...
+      // 1 是否要新建一个taskRecord，栈？
+       boolean newTask = false;
+        final TaskRecord taskToAffiliate = (mLaunchTaskBehind && mSourceRecord != null)
+                ? mSourceRecord.getTaskRecord() : null;
+
+        // Should this be considered a new task?
+        int result = START_SUCCESS;
+        if (mStartActivity.resultTo == null && mInTask == null && !mAddingToTask
+                && (mLaunchFlags & FLAG_ACTIVITY_NEW_TASK) != 0) {
+            newTask = true;
+            result = setTaskFromReuseOrCreateNewTask(taskToAffiliate);
+        } else if (mSourceRecord != null) {
+            result = setTaskFromSourceRecord();
+        } else if (mInTask != null) {
+            result = setTaskFromInTask();
+        } else {
+            // This not being started from an existing activity, and not part of a new task...
+            // just put it in the top task, though these days this case should never happen.
+            result = setTaskToCurrentTopOrCreateNewTask();
+        }
+        if (result != START_SUCCESS) {
+            return result;
+        }
+            
+        ...
+        // 2 处理 activityRecord和 TaskRecord 的关系   
+         mTargetStack.startActivityLocked(mStartActivity, topFocused, newTask, mKeepCurTransition,
+                mOptions);
+                
+         // 3 resume顶部的activity        
+        
+          if (mDoResume) {
+            final ActivityRecord topTaskActivity =
+                    mStartActivity.getTaskRecord().topRunningActivityLocked();
+            if (!mTargetStack.isFocusable()
+                    || (topTaskActivity != null && topTaskActivity.mTaskOverlay
+                    && mStartActivity != topTaskActivity)) {
+                mTargetStack.ensureActivitiesVisibleLocked(mStartActivity, 0, !PRESERVE_WINDOWS);
+                // Go ahead and tell window manager to execute app transition for this activity
+                // since the app transition will not be triggered through the resume channel.
+                mTargetStack.getDisplay().mDisplayContent.executeAppTransition();
+            } else {
+              
+                // 启动栈顶的activity 
+                mRootActivityContainer.resumeFocusedStacksTopActivities(
+                        mTargetStack, mStartActivity, mOptions);
+            }
+        } else if (mStartActivity != null) {
+            mSupervisor.mRecentTasks.add(mStartActivity.getTaskRecord());
+        }   
+            
+ 
+ }           
+```
+
+> /com/android/server/wm/RootActivityContainer.java
+
+# resumeFocusedStacksTopActivities()
+
+```
+ boolean resumeFocusedStacksTopActivities(
+            ActivityStack targetStack, ActivityRecord target, ActivityOptions targetOptions) {
+      
+        boolean result = false;
+        if (targetStack != null && (targetStack.isTopStackOnDisplay()
+                || getTopDisplayFocusedStack() == targetStack)) {
+                // 开始启动 
+            result = targetStack.resumeTopActivityUncheckedLocked(target, targetOptions);
+        }
+        
+         for (int displayNdx = mActivityDisplays.size() - 1; displayNdx >= 0; --displayNdx) {
+            boolean resumedOnDisplay = false;
+            final ActivityDisplay display = mActivityDisplays.get(displayNdx);
+            for (int stackNdx = display.getChildCount() - 1; stackNdx >= 0; --stackNdx) {
+                final ActivityStack stack = display.getChildAt(stackNdx);
+                final ActivityRecord topRunningActivity = stack.topRunningActivityLocked();
+                if (!stack.isFocusableAndVisible() || topRunningActivity == null) {
+                    continue;
+                }
+                if (stack == targetStack) {
+                    // Simply update the result for targetStack because the targetStack had
+                    // already resumed in above. We don't want to resume it again, especially in
+                    // some cases, it would cause a second launch failure if app process was dead.
+                    resumedOnDisplay |= result;
+                    continue;
+                }
+                if (display.isTopStack(stack) && topRunningActivity.isState(RESUMED)) {
+                    // Kick off any lingering app transitions form the MoveTaskToFront operation,
+                    // but only consider the top task and stack on that display.
+                    stack.executeAppTransition(targetOptions);
+                } else {
+                    resumedOnDisplay |= topRunningActivity.makeActiveIfNeeded(target);
+                }
+            }
+            // 以防万一，如果没有resume，那么就resuem
+            if (!resumedOnDisplay) {
+                // In cases when there are no valid activities (e.g. device just booted or launcher
+                // crashed) it's possible that nothing was resumed on a display. Requesting resume
+                // of top activity in focused stack explicitly will make sure that at least home
+                // activity is started and resumed, and no recursion occurs.
+                final ActivityStack focusedStack = display.getFocusedStack();
+                if (focusedStack != null) {
+                
+                    focusedStack.resumeTopActivityUncheckedLocked(target, targetOptions);
+                }
+            }
+
+}
+```
+
+> ActivityStack.java
+
+# resumeTopActivityUncheckedLocked()
+
+```
+ boolean resumeTopActivityUncheckedLocked(ActivityRecord prev, ActivityOptions options) {
+        if (mInResumeTopActivity) {
+            // Don't even start recursing.
+            return false;
+        }
+
+        boolean result = false;
+         boolean result = false;
+        try {
+            // Protect against recursion.
+            mInResumeTopActivity = true;
+            result = resumeTopActivityInnerLocked(prev, options);
+         ...
+         
+        }
+        
+ }
+ 
+         
+```
+
+> ActivityStack.java
+
+# resumeTopActivityInnerLocked()
+
+```
+ private boolean resumeTopActivityInnerLocked(ActivityRecord prev, ActivityOptions options) {
+      
+      //找到当前栈的顶部 是否有activity 
+      ActivityRecord next = topRunningActivityLocked(true /* focusableOnly */);   
+      // 当前的activity是否正在running？？        
+      final boolean hasRunningActivity = next != null;
+      
+      // 一些安全的操作确认，如用户、pausing等
+      ...
+      // 如有activity正在pauseing，那么啥都不能做，直到pausing完成。
+       if (!mRootActivityContainer.allPausedActivitiesComplete()) {
+            if (DEBUG_SWITCH || DEBUG_PAUSE || DEBUG_STATES) Slog.v(TAG_PAUSE,
+                    "resumeTopActivityLocked: Skip resume: some activity pausing.");
+
+            return false;
+        }
+        
+        ... 
+       
+       if(next.attachedToProcess()){
+       ...
+       } else {
+         // Whoops, need to restart this activity!
+         if (!next.hasBeenLaunched) {
+             next.hasBeenLaunched = true;
+         } else {
+             if (SHOW_APP_STARTING_PREVIEW) {
+                 next.showStartingWindow(null /* prev */, false /* newTask */,
+                         false /* taskSwich */);
+             }
+             if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Restarting: " + next);
+         }
+         if (DEBUG_STATES) Slog.d(TAG_STATES, "resumeTopActivityLocked: Restarting " + next);
+         
+         // 
+         mStackSupervisor.startSpecificActivityLocked(next, true, true);
+     }
+ 
+ 
+ }
+```
+
+> android-29/com/android/server/wm/ActivityStackSupervisor.java
+
+# startSpecificActivityLocked()
+
+```
+ void startSpecificActivityLocked(ActivityRecord r, boolean andResume, boolean checkConfig) {
+        // Is this activity's application already running?
+      // 当前进程是否已经拉起？ 
+   final WindowProcessController wpc =
+                mService.getProcessController(r.processName, r.info.applicationInfo.uid);
+
+        boolean knownToBeDead = false;
+        if (wpc != null && wpc.hasThread()) {
+            try {
+                realStartActivityLocked(r, wpc, andResume, checkConfig);
+                return;
+            } catch (RemoteException e) {
+                Slog.w(TAG, "Exception when starting activity "
+                        + r.intent.getComponent().flattenToShortString(), e);
+            }
+
+            // If a dead object exception was thrown -- fall through to
+            // restart the application.
+            knownToBeDead = true;
+        }
+        ...
+        // 如果没有起来，则发送消息给 atms，通过zygote fork() 出 进程
+         // Post message to start process to avoid possible deadlock of calling into AMS with the
+            // ATMS lock held.
+            final Message msg = PooledLambda.obtainMessage(
+                    ActivityManagerInternal::startProcess, mService.mAmInternal, r.processName,
+                    r.info.applicationInfo, knownToBeDead, "activity", r.intent.getComponent());
+            mService.mH.sendMessage(msg);
+
+}
+```
+
+> android-29/com/android/server/wm/ActivityStackSupervisor.java
+
+# realStartActivityLocked
+
+```
+boolean realStartActivityLocked(ActivityRecord r, WindowProcessController proc,
+         boolean andResume, boolean checkConfig) throws RemoteException {
+   // ...
+   
+    // Create activity launch transaction.
+    
+    // 1, 创建launch transactionItem
+    final ClientTransaction clientTransaction = ClientTransaction.obtain(
+            proc.getThread(), r.appToken);
+
+    final DisplayContent dc = r.getDisplay().mDisplayContent;
+    clientTransaction.addCallback(LaunchActivityItem.obtain(new Intent(r.intent),
+            System.identityHashCode(r), r.info,
+            // TODO: Have this take the merged configuration instead of separate global
+            // and override configs.
+            mergedConfiguration.getGlobalConfiguration(),
+            mergedConfiguration.getOverrideConfiguration(), r.compat,
+            r.launchedFromPackage, task.voiceInteractor, proc.getReportedProcState(),
+            r.icicle, r.persistentState, results, newIntents,
+            dc.isNextTransitionForward(), proc.createProfilerInfoIfNeeded(),
+                    r.assistToken));
+    
+    // 2 设置最终生命周期状态 Set desired final state.
+    final ActivityLifecycleItem lifecycleItem;
+    if (andResume) {
+        // 设置resume
+        lifecycleItem = ResumeActivityItem.obtain(dc.isNextTransitionForward());
+    } else {
+        lifecycleItem = PauseActivityItem.obtain();
+    }
+    clientTransaction.setLifecycleStateRequest(lifecycleItem);                           
+                                       
+      //3，开始启动任务 Schedule transaction.
+      mService.getLifecycleManager().scheduleTransaction(clientTransaction);                                    
+         
+   // ...
+}         
+
+```
+
+这里不得不说下 ClientTransaction 机制。 看关系图：
+
+![img.png](img.png)
+
+ClientLifeManager 调用 .scheduleTransaction(clientTransaction)方法，内部调用的是ClientTransaction的 schdule()
+方法。内部的mClient 对象是一个IBinder对象，其实就是App端的的ApplicationThread对象，继续调用 mClient的 scheduleTransaction()
+。至此跨进程把数据传输到了App端。最终，调用ActivityThread的 HandleLaunchActivity(0)。
+
+具体详情，可以参考 Launch篇，这里简单过一遍流程。
+
+# ClientLifeManager.scheduleTransaction()
+
+```
+ void scheduleTransaction(ClientTransaction transaction) throws RemoteException {
+        final IApplicationThread client = transaction.getClient();
+        // 
+        transaction.schedule();
+        ....
+    }
+
+```
+
+调用了ClientTransaction的 schedule():
+
+# ClientTransaction.schedule()
+
+```
+  public void schedule() throws RemoteException {
+        mClient.scheduleTransaction(this);
+    }
+```
+
+# ApplicationThread. scheduleTransaction()
+
+```
+ @Override
+        public void scheduleTransaction(ClientTransaction transaction) throws RemoteException {
+            ActivityThread.this.scheduleTransaction(transaction);
+        }
+```
+
+# ActivityThread.scheduleTransaction()
+
+ActivityThread没有这个方法，但是继承了 ClientTransactionHandler，父类有这个方法：
+
+```
+/** Prepare and schedule transaction for execution. */
+ void scheduleTransaction(ClientTransaction transaction) {
+     transaction.preExecute(this);
+     sendMessage(ActivityThread.H.EXECUTE_TRANSACTION, transaction);
+ }
+```
+
+1. preExecute()，此时还处于binder线程
+2. 发送了一个消息 sendMessage 到主线程的 H，其实就是从binder线程切换到app端的主线程
+
+# ActivityThread.H.EXECUTE_TRANSACTION分支
+
+```
+case EXECUTE_TRANSACTION:
+     final ClientTransaction transaction = (ClientTransaction) msg.obj;
+     // 开始执行
+     mTransactionExecutor.execute(transaction);
+     
+     if (isSystem()) {
+         // Client transactions inside system process are recycled on the client side
+         // instead of ClientLifecycleManager to avoid being cleared before this
+         // message is handled.
+         transaction.recycle();
+     }
+     // TODO(lifecycler): Recycle locally scheduled transactions.
+     break;
+```
+
+> android-29/android/app/servertransaction/TransactionExecutor.java
+
+# TransactionExecutor.execute()
+
+```
+  public void execute(ClientTransaction transaction) {
+         // 这个token很熟悉，可以简单理解为对应 AMS侧的ActivityRecord的凭证
+        final IBinder token = transaction.getActivityToken();
+         //... 
+         //执行callback，
+        executeCallbacks(transaction);
+        // 执行生命周期
+        executeLifecycleState(transaction);
+        mPendingActions.clear();
+       
+    }
+```
+
+# executeCallbacks()
+
+```
+ public void executeCallbacks(ClientTransaction transaction) {
+        final List<ClientTransactionItem> callbacks = transaction.getCallbacks();
+        if (callbacks == null || callbacks.isEmpty()) {
+            // No callbacks to execute, return early.
+            return;
+        }
+
+        final IBinder token = transaction.getActivityToken();
+        // r此时为空 
+        ActivityClientRecord r = mTransactionHandler.getActivityClient(token);
+
+        final int size = callbacks.size();
+        for (int i = 0; i < size; ++i) {
+           // ... 
+
+            item.execute(mTransactionHandler, token, mPendingActions);
+            item.postExecute(mTransactionHandler, token, mPendingActions);
+            if (r == null) {
+            // 赋值 
+                // Launch activity request will create an activity record.
+                r = mTransactionHandler.getActivityClient(token);
+            }
+            //...
+        }
+    }
+```
+
+内部调用 execute() 和postExecute() 方法： 我们之前加入过一个LaunchAcitivityIitem。
+
+# LaunchActivityItem.execute()
+
+```
+  @Override
+    public void execute(ClientTransactionHandler client, IBinder token,
+            PendingTransactionActions pendingActions) {
+        Trace.traceBegin(TRACE_TAG_A CTIVITY_MANAGER, "activityStart");
+        // 创建了一个 ActivityClientRecord 对象
+        ActivityClientRecord r = new ActivityClientRecord(token, mIntent, mIdent, mInfo,
+                mOverrideConfig, mCompatInfo, mReferrer, mVoiceInteractor, mState, mPersistentState,
+                mPendingResults, mPendingNewIntents, mIsForward,
+                mProfilerInfo, client, mAssistToken);
+        // 调用 ClientTransactionHandler 的 handleLaunchActivity 方法(),
+        client.handleLaunchActivity(r, pendingActions, null /* customIntent */);
+        Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
+    }
+```
+
+ClientTransactionHandler中的 handleLaunchActivity() 是抽象的。所以看 ActivityThread 子类的：
+
+# ActivityThread.handleLaunchActivity()
+
+```
+public Activity handleLaunchActivity(ActivityClientRecord r,
+            PendingTransactionActions pendingActions, Intent customIntent) {
+
+        // ...
+         
+          final Activity a = performLaunchActivity(r, customIntent);
+          
+        //  ...
+
+
+}
+
+```
+
+至此，内部会去创建activity对象实例，同时回调onCreate方法。
+
+# executeLifecycleState
+
+内部会调整生命周期的正确性，确保生命周期按照onCreate、onStart、onResume等顺序回调。一次调用 handleStartActivity handleResumeActivity
+handlePauseActivity handleStopActivity handleDestroyActivity
+
+我们依次看看：
+
+### handleStartActivity()
+
+```
+ @Override
+    public void handleStartActivity(ActivityClientRecord r,
+            PendingTransactionActions pendingActions) {
+        final Activity activity = r.activity;
+        ... 
+
+        // Start
+        activity.performStart("handleStartActivity");
+        r.setState(ON_START);
+
+```
+
+performStart():
+
+```
+final void performStart(String reason) {
+        dispatchActivityPreStarted();
+        mActivityTransitionState.setEnterActivityOptions(this, getActivityOptions());
+        mFragments.noteStateNotSaved();
+        mCalled = false;
+        // fragmentsg管理
+        mFragments.execPendingActions();
+        
+        mInstrumentation.callActivityOnStart(this);
+        writeEventLog(LOG_AM_ON_START_CALLED, reason);
+
+        if (!mCalled) {
+            throw new SuperNotCalledException(
+                "Activity " + mComponent.toShortString() +
+                " did not call through to super.onStart()");
+        }
+        mFragments.dispatchStart();
+        mFragments.reportLoaderStart();
+        ...
+     
+
+}
+```
+
+### handleResumeActivity()
+
+```
+@Override
+    public void handleResumeActivity(IBinder token, boolean finalStateRequest, boolean isForward,
+            String reason) {
+        // If we are getting ready to gc after going to the background, well
+        // we are back active so skip it.
+        unscheduleGcIdler();
+        mSomeActivitiesChanged = true;
+
+        // TODO Push resumeArgs into the activity for consideration
+        // 1 执行activity的  onResume() 方法
+        final ActivityClientRecord r = performResumeActivity(token, finalStateRequest, reason);
+        if (r == null) {
+            // 避免多次onResume（） 执行 
+            // We didn't actually resume the activity, so skipping any follow-up actions.
+            return;
+        }
+        // 如果该activity准备要destroy，那么久没必要去渲染UI了
+        if (mActivitiesToBeDestroyed.containsKey(token)) {
+            // Although the activity is resumed, it is going to be destroyed. So the following
+            // UI operations are unnecessary and also prevents exception because its token may
+            // be gone that window manager cannot recognize it. All necessary cleanup actions
+            // performed below will be done while handling destruction.
+            return;
+        }
+
+        final Activity a = r.activity;
+
+        if (localLOGV) {
+            Slog.v(TAG, "Resume " + r + " started activity: " + a.mStartedActivity
+                    + ", hideForNow: " + r.hideForNow + ", finished: " + a.mFinished);
+        }
+
+         //...
+         
+        if (r.window == null && !a.mFinished && willBeVisible) {
+            r.window = r.activity.getWindow();
+            // 获取decorView
+            View decor = r.window.getDecorView();
+            // 设置decorView 可见
+            decor.setVisibility(View.INVISIBLE);
+            // 获取 windowmanager
+            ViewManager wm = a.getWindowManager();
+            // 获取window的布局参数 
+            WindowManager.LayoutParams l = r.window.getAttributes();
+            a.mDecor = decor;
+            // window 类型
+            l.type = WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
+            l.softInputMode |= forwardBit;
+            if (r.mPreserveWindow) {
+                a.mWindowAdded = true;
+                r.mPreserveWindow = false;
+                // Normally the ViewRoot sets up callbacks with the Activity
+                // in addView->ViewRootImpl#setView. If we are instead reusing
+                // the decor view we have to notify the view root that the
+                // callbacks may have changed.
+                ViewRootImpl impl = decor.getViewRootImpl();
+                if (impl != null) {
+                    impl.notifyChildRebuilt();
+                }
+            }
+            if (a.mVisibleFromClient) {
+                if (!a.mWindowAdded) {
+                    a.mWindowAdded = true;
+                    // 把decorView添加到 window
+                    wm.addView(decor, l);
+                } else {
+                    // The activity will get a callback for this {@link LayoutParams} change
+                    // earlier. However, at that time the decor will not be set (this is set
+                    // in this method), so no action will be taken. This call ensures the
+                    // callback occurs with the decor set.
+                    a.onWindowAttributesChanged(l);
+                }
+            }
+
+            // If the window has already been added, but during resume
+            // we started another activity, then don't yet make the
+            // window visible.
+        } else if (!willBeVisible) {
+            if (localLOGV) Slog.v(TAG, "Launch " + r + " mStartedActivity set");
+            r.hideForNow = true;
+        }
+
+        // Get rid of anything left hanging around.
+        cleanUpPendingRemoveWindows(r, false /* force */);
+
+        // The window is now visible if it has been added, we are not
+        // simply finishing, and we are not starting another activity.
+        if (!r.activity.mFinished && willBeVisible && r.activity.mDecor != null && !r.hideForNow) {
+            if (r.newConfig != null) {
+                performConfigurationChangedForActivity(r, r.newConfig);
+                if (DEBUG_CONFIGURATION) {
+                    Slog.v(TAG, "Resuming activity " + r.activityInfo.name + " with newConfig "
+                            + r.activity.mCurrentConfig);
+                }
+                r.newConfig = null;
+            }
+            if (localLOGV) Slog.v(TAG, "Resuming " + r + " with isForward=" + isForward);
+            WindowManager.LayoutParams l = r.window.getAttributes();
+            if ((l.softInputMode
+                    & WindowManager.LayoutParams.SOFT_INPUT_IS_FORWARD_NAVIGATION)
+                    != forwardBit) {
+                l.softInputMode = (l.softInputMode
+                        & (~WindowManager.LayoutParams.SOFT_INPUT_IS_FORWARD_NAVIGATION))
+                        | forwardBit;
+                if (r.activity.mVisibleFromClient) {
+                    ViewManager wm = a.getWindowManager();
+                    View decor = r.window.getDecorView();
+                    wm.updateViewLayout(decor, l);
+                }
+            }
+
+            r.activity.mVisibleFromServer = true;
+            mNumVisibleActivities++;
+            if (r.activity.mVisibleFromClient) {
+                r.activity.makeVisible();
+            }
+        }
+
+        r.nextIdle = mNewActivities;
+        mNewActivities = r;
+        if (localLOGV) Slog.v(TAG, "Scheduling idle handler for " + r);
+        Looper.myQueue().addIdleHandler(new Idler());
+    }
+
+```
+
+performResumeActivity():
+
+```
+  public ActivityClientRecord performResumeActivity(IBinder token, boolean finalStateRequest,
+            String reason) {
+        final ActivityClientRecord r = mActivities.get(token);
+
+        if (r == null || r.activity.mFinished) {
+            return null;
+        }
+        if (r.getLifecycleState() == ON_RESUME) {
+           // ... 避免多次onResume
+            return null;
+        }
+        if (finalStateRequest) {
+            r.hideForNow = false;
+            r.activity.mStartedActivity = false;
+        }
+        try {
+            r.activity.onStateNotSaved();
+            r.activity.mFragments.noteStateNotSaved();
+            checkAndBlockForNetworkAccess();
+            if (r.pendingIntents != null) {
+                deliverNewIntents(r, r.pendingIntents);
+                r.pendingIntents = null;
+            }
+            if (r.pendingResults != null) {
+                deliverResults(r, r.pendingResults, reason);
+                r.pendingResults = null;
+            }
+            // 执行activity的 onResume方法 
+            r.activity.performResume(r.startsNotResumed, reason);
+
+            r.state = null;
+            r.persistentState = null;
+            r.setState(ON_RESUME);
+
+            reportTopResumedActivityChanged(r, r.isTopResumedActivity, "topWhenResuming");
+        } ...
+        return r;
+    }
+```
+
+performResume():
+
+```
+ final void performResume(boolean followedByPause, String reason) {
+        dispatchActivityPreResumed();
+        performRestart(true /* start */, reason);
+
+        mFragments.execPendingActions();
+
+        mLastNonConfigurationInstances = null;
+
+        if (mAutoFillResetNeeded) {
+            // When Activity is destroyed in paused state, and relaunch activity, there will be
+            // extra onResume and onPause event,  ignore the first onResume and onPause.
+            // see ActivityThread.handleRelaunchActivity()
+            mAutoFillIgnoreFirstResumePause = followedByPause;
+            if (mAutoFillIgnoreFirstResumePause && DEBUG_LIFECYCLE) {
+                Slog.v(TAG, "autofill will ignore first pause when relaunching " + this);
+            }
+        }
+
+        mCalled = false;
+        // mResumed is set by the instrumentation
+        // 真正执行onResume方法
+        mInstrumentation.callActivityOnResume(this);
+      
+        // invisible activities must be finished before onResume() completes
+        if (!mVisibleFromClient && !mFinished) {
+            Log.w(TAG, "An activity without a UI must call finish() before onResume() completes");
+            if (getApplicationInfo().targetSdkVersion
+                    > android.os.Build.VERSION_CODES.LOLLIPOP_MR1) {
+                throw new IllegalStateException(
+                        "Activity " + mComponent.toShortString() +
+                        " did not call finish() prior to onResume() completing");
+            }
+        }
+
+        // Now really resume, and install the current status bar and menu.
+        mCalled = false;
+        // fragments分发
+        mFragments.dispatchResume();
+        mFragments.execPendingActions();
+        ... 
+    }
+
+```
+
+## handlePauseActivity()
+
+```
+ @Override
+    public void handlePauseActivity(IBinder token, boolean finished, boolean userLeaving,
+            int configChanges, PendingTransactionActions pendingActions, String reason) {
+        ActivityClientRecord r = mActivities.get(token);
+        if (r != null) {
+            ...
+            
+            performPauseActivity(r, finished, reason, pendingActions);
+
+            // Make sure any pending writes are now committed.
+            if (r.isPreHoneycomb()) {
+                QueuedWork.waitToFinish();
+            }
+            mSomeActivitiesChanged = true;
+        }
+    }
+
+```
+
+## performPauseActivity()
+
+```
+private Bundle performPauseActivity(ActivityClientRecord r, boolean finished, String reason,
+         PendingTransactionActions pendingActions) {
+    ...
+     if (finished) {
+         r.activity.mFinished = true;
+     }
+
+     // Pre-Honeycomb apps always save their state before pausing
+     // 是否应该保存 state
+     final boolean shouldSaveState = !r.activity.mFinished && r.isPreHoneycomb();
+     if (shouldSaveState) {
+         callActivityOnSaveInstanceState(r);
+     }
+      
+     performPauseActivityIfNeeded(r, reason);
+
+     // Notify any outstanding on paused listeners
+     // 通知注册了pause监听器
+     ArrayList<OnActivityPausedListener> listeners;
+     synchronized (mOnPauseListeners) {
+         listeners = mOnPauseListeners.remove(r.activity);
+     }
+     int size = (listeners != null ? listeners.size() : 0);
+     for (int i = 0; i < size; i++) {
+         listeners.get(i).onPaused(r.activity);
+     }
+
+     ....
+
+     return shouldSaveState ? r.state : null;
+ }
+```
+
+## performPauseActivityIfNeeded()
+
+```
+ private void performPauseActivityIfNeeded(ActivityClientRecord r, String reason) {
+        if (r.paused) {
+            // You are already paused silly...
+            return;
+        }
+
+        // Always reporting top resumed position loss when pausing an activity. If necessary, it
+        // will be restored in performResumeActivity().
+        reportTopResumedActivityChanged(r, false /* onTop */, "pausing");
+
+        try {
+            r.activity.mCalled = false;
+            // 调用activity的 performPause() 
+            mInstrumentation.callActivityOnPause(r.activity);
+            if (!r.activity.mCalled) {
+                throw new SuperNotCalledException("Activity " + safeToComponentShortString(r.intent)
+                        + " did not call through to super.onPause()");
+            }
+        }....
+        r.setState(ON_PAUSE);
+    }
+```
+
+## Activity.performPause()
+
+```
+final void performPause() {
+        dispatchActivityPrePaused();
+        mDoReportFullyDrawn = false;
+        mFragments.dispatchPause();
+        mCalled = false;
+        onPause();
+        writeEventLog(LOG_AM_ON_PAUSE_CALLED, "performPause");
+        mResumed = false;
+        if (!mCalled && getApplicationInfo().targetSdkVersion
+                >= android.os.Build.VERSION_CODES.GINGERBREAD) {
+            throw new SuperNotCalledException(
+                    "Activity " + mComponent.toShortString() +
+                    " did not call through to super.onPause()");
+        }
+        dispatchActivityPostPaused();
+    }
+```
+
+## handleStopActivity()
+
+```
+@Override
+    public void handleStopActivity(IBinder token, boolean show, int configChanges,
+            PendingTransactionActions pendingActions, boolean finalStateRequest, String reason) {
+        final ActivityClientRecord r = mActivities.get(token);
+        r.activity.mConfigChangeFlags |= configChanges;
+
+        final StopInfo stopInfo = new StopInfo();
+        performStopActivityInner(r, stopInfo, show, true /* saveState */, finalStateRequest,
+                reason);
+
+        if (localLOGV) Slog.v(
+            TAG, "Finishing stop of " + r + ": show=" + show
+            + " win=" + r.window);
+
+        updateVisibility(r, show);
+
+        // Make sure any pending writes are now committed.
+        if (!r.isPreHoneycomb()) {
+            QueuedWork.waitToFinish();
+        }
+
+        stopInfo.setActivity(r);
+        stopInfo.setState(r.state);
+        stopInfo.setPersistentState(r.persistentState);
+        pendingActions.setStopInfo(stopInfo);
+        mSomeActivitiesChanged = true;
+    }
+```
+
+## performStopActivityInner()
+
+````
+private void performStopActivityInner(ActivityClientRecord r, StopInfo info, boolean keepShown,
+            boolean saveState, boolean finalStateRequest, String reason) {
+        if (localLOGV) Slog.v(TAG, "Performing stop of " + r);
+        if (r != null) {
+            
+            // One must first be paused before stopped...
+            // 确保先执行 pause方法
+            performPauseActivityIfNeeded(r, reason);
+
+            if (info != null) {
+                try {
+                    // First create a thumbnail for the activity...
+                    // For now, don't create the thumbnail here; we are
+                    // doing that by doing a screen snapshot.
+                    info.setDescription(r.activity.onCreateDescription());
+                } catch (Exception e) {
+                    if (!mInstrumentation.onException(r.activity, e)) {
+                        throw new RuntimeException(
+                                "Unable to save state of activity "
+                                + r.intent.getComponent().toShortString()
+                                + ": " + e.toString(), e);
+                    }
+                }
+            }
+
+            if (!keepShown) {
+                callActivityOnStop(r, saveState, reason);
+            }
+        }
+    }
+
+````
+
+## callActivityOnStop()
+
+```
+ private void callActivityOnStop(ActivityClientRecord r, boolean saveState, String reason) {
+        // Before P onSaveInstanceState was called before onStop, starting with P it's
+        // called after. Before Honeycomb state was always saved before onPause.
+        final boolean shouldSaveState = saveState && !r.activity.mFinished && r.state == null
+                && !r.isPreHoneycomb();
+        final boolean isPreP = r.isPreP();
+        if (shouldSaveState && isPreP) {
+            // 执行 callActivityOnSaveInstanceState方法
+            callActivityOnSaveInstanceState(r);
+        }
+
+        try {
+            r.activity.performStop(r.mPreserveWindow, reason);
+        } ...
+        r.setState(ON_STOP);
+
+        if (shouldSaveState && !isPreP) {
+            callActivityOnSaveInstanceState(r);
+        }
+    }
+```
+
+## Activity.performStop()
+
+```
+final void performStop(boolean preserveWindow, String reason) {
+        mDoReportFullyDrawn = false;
+        mFragments.doLoaderStop(mChangingConfigurations /*retain*/);
+
+        // Disallow entering picture-in-picture after the activity has been stopped
+        mCanEnterPictureInPicture = false;
+
+        if (!mStopped) {
+            dispatchActivityPreStopped();
+            if (mWindow != null) {
+                mWindow.closeAllPanels();
+            }
+
+            // If we're preserving the window, don't setStoppedState to true, since we
+            // need the window started immediately again. Stopping the window will
+            // destroys hardware resources and causes flicker.
+            if (!preserveWindow && mToken != null && mParent == null) {
+                WindowManagerGlobal.getInstance().setStoppedState(mToken, true);
+            }
+
+            mFragments.dispatchStop();
+
+            mCalled = false;
+            mInstrumentation.callActivityOnStop(this);
+            writeEventLog(LOG_AM_ON_STOP_CALLED, reason);
+            if (!mCalled) {
+                throw new SuperNotCalledException(
+                    "Activity " + mComponent.toShortString() +
+                    " did not call through to super.onStop()");
+            }
+
+            synchronized (mManagedCursors) {
+                final int N = mManagedCursors.size();
+                for (int i=0; i<N; i++) {
+                    ManagedCursor mc = mManagedCursors.get(i);
+                    if (!mc.mReleased) {
+                        mc.mCursor.deactivate();
+                        mc.mReleased = true;
+                    }
+                }
+            }
+
+            mStopped = true;
+            dispatchActivityPostStopped();
+        }
+        mResumed = false;
+    }
+```
+
+## handleDestroyActivity()
+
+```
+ @Override
+    public void handleDestroyActivity(IBinder token, boolean finishing, int configChanges,
+            boolean getNonConfigInstance, String reason) {
+            // 执行 onDestroy方法 
+        ActivityClientRecord r = performDestroyActivity(token, finishing,
+                configChanges, getNonConfigInstance, reason);
+                // 清理window绑定 
+        if (r != null) {
+            cleanUpPendingRemoveWindows(r, finishing);
+            WindowManager wm = r.activity.getWindowManager();
+            View v = r.activity.mDecor;
+            if (v != null) {
+                if (r.activity.mVisibleFromServer) {
+                    mNumVisibleActivities--;
+                }
+                IBinder wtoken = v.getWindowToken();
+                if (r.activity.mWindowAdded) {
+                    if (r.mPreserveWindow) {
+                        // Hold off on removing this until the new activity's
+                        // window is being added.
+                        r.mPendingRemoveWindow = r.window;
+                        r.mPendingRemoveWindowManager = wm;
+                        // We can only keep the part of the view hierarchy that we control,
+                        // everything else must be removed, because it might not be able to
+                        // behave properly when activity is relaunching.
+                        r.window.clearContentView();
+                    } else {
+                        wm.removeViewImmediate(v);
+                    }
+                }
+                if (wtoken != null && r.mPendingRemoveWindow == null) {
+                    WindowManagerGlobal.getInstance().closeAll(wtoken,
+                            r.activity.getClass().getName(), "Activity");
+                } else if (r.mPendingRemoveWindow != null) {
+                    // We're preserving only one window, others should be closed so app views
+                    // will be detached before the final tear down. It should be done now because
+                    // some components (e.g. WebView) rely on detach callbacks to perform receiver
+                    // unregister and other cleanup.
+                    WindowManagerGlobal.getInstance().closeAllExceptView(token, v,
+                            r.activity.getClass().getName(), "Activity");
+                }
+                r.activity.mDecor = null;
+            }
+            if (r.mPendingRemoveWindow == null) {
+                // If we are delaying the removal of the activity window, then
+                // we can't clean up all windows here.  Note that we can't do
+                // so later either, which means any windows that aren't closed
+                // by the app will leak.  Well we try to warning them a lot
+                // about leaking windows, because that is a bug, so if they are
+                // using this recreate facility then they get to live with leaks.
+                WindowManagerGlobal.getInstance().closeAll(token,
+                        r.activity.getClass().getName(), "Activity");
+            }
+
+            // Mocked out contexts won't be participating in the normal
+            // process lifecycle, but if we're running with a proper
+            // ApplicationContext we need to have it tear down things
+            // cleanly.
+            Context c = r.activity.getBaseContext();
+            if (c instanceof ContextImpl) {
+                ((ContextImpl) c).scheduleFinalCleanup(
+                        r.activity.getClass().getName(), "Activity");
+            }
+        }
+        if (finishing) {
+            try {
+                ActivityTaskManager.getService().activityDestroyed(token);
+            } catch (RemoteException ex) {
+                throw ex.rethrowFromSystemServer();
+            }
+        }
+        mSomeActivitiesChanged = true;
+    }
+```
+
+## performDestroyActivity()
+
+```
+ /** Core implementation of activity destroy call. */
+    ActivityClientRecord performDestroyActivity(IBinder token, boolean finishing,
+            int configChanges, boolean getNonConfigInstance, String reason) {
+        ActivityClientRecord r = mActivities.get(token);
+        Class<? extends Activity> activityClass = null;
+        if (localLOGV) Slog.v(TAG, "Performing finish of " + r);
+        if (r != null) {
+            activityClass = r.activity.getClass();
+            r.activity.mConfigChangeFlags |= configChanges;
+            if (finishing) {
+                r.activity.mFinished = true;
+            }
+
+            performPauseActivityIfNeeded(r, "destroy");
+
+            if (!r.stopped) {
+                callActivityOnStop(r, false /* saveState */, "destroy");
+            }
+            if (getNonConfigInstance) {
+                try {
+                    r.lastNonConfigurationInstances
+                            = r.activity.retainNonConfigurationInstances();
+                } catch (Exception e) {
+                    if (!mInstrumentation.onException(r.activity, e)) {
+                        throw new RuntimeException(
+                                "Unable to retain activity "
+                                + r.intent.getComponent().toShortString()
+                                + ": " + e.toString(), e);
+                    }
+                }
+            }
+            try {
+                r.activity.mCalled = false;
+                // 
+                mInstrumentation.callActivityOnDestroy(r.activity);
+                if (!r.activity.mCalled) {
+                    throw new SuperNotCalledException(
+                        "Activity " + safeToComponentShortString(r.intent) +
+                        " did not call through to super.onDestroy()");
+                }
+                if (r.window != null) {
+                    r.window.closeAllPanels();
+                }
+            } catch (SuperNotCalledException e) {
+                throw e;
+            } catch (Exception e) {
+                if (!mInstrumentation.onException(r.activity, e)) {
+                    throw new RuntimeException(
+                            "Unable to destroy activity " + safeToComponentShortString(r.intent)
+                            + ": " + e.toString(), e);
+                }
+            }
+            r.setState(ON_DESTROY);
+        }
+        schedulePurgeIdler();
+        // updatePendingActivityConfiguration() reads from mActivities to update
+        // ActivityClientRecord which runs in a different thread. Protect modifications to
+        // mActivities to avoid race.
+        synchronized (mResourcesManager) {
+            mActivities.remove(token);
+        }
+        StrictMode.decrementExpectedActivityCount(activityClass);
+        return r;
+    }
+```
+
+## callActivityOnDestroy()
+
+```
+    public void callActivityOnDestroy(Activity activity) {
+      // TODO: the following block causes intermittent hangs when using startActivity
+      // temporarily comment out until root cause is fixed (bug 2630683)
+
+      
+      activity.performDestroy();
+  }
+```
+
+## Activity.performDestroy()
+
+```
+final void performDestroy() {
+        dispatchActivityPreDestroyed();
+        mDestroyed = true;
+        mWindow.destroy();
+        // fragments先来 
+        mFragments.dispatchDestroy();
+        onDestroy();
+        writeEventLog(LOG_AM_ON_DESTROY_CALLED, "performDestroy");
+        mFragments.doLoaderDestroy();
+        if (mVoiceInteractor != null) {
+            mVoiceInteractor.detachActivity();
+        }
+        dispatchActivityPostDestroyed();
+    }
+```
+
+> ActivityThread.java
+
+# ActivityThread.performLaunchActivity()
+
+```
+ private Activity performLaunchActivity(ActivityClientRecord r, Intent customIntent) {
+      // 设置  ActivityClientRecord 一些信息 
+    ActivityInfo aInfo = r.activityInfo;
+        if (r.packageInfo == null) {
+            r.packageInfo = getPackageInfo(aInfo.applicationInfo, r.compatInfo,
+                    Context.CONTEXT_INCLUDE_CODE);
+        }
+
+        ComponentName component = r.intent.getComponent();
+        if (component == null) {
+            component = r.intent.resolveActivity(
+                mInitialApplication.getPackageManager());
+            r.intent.setComponent(component);
+        }
+
+        if (r.activityInfo.targetActivity != null) {
+            component = new ComponentName(r.activityInfo.packageName,
+                    r.activityInfo.targetActivity);
+        }
+
+      // 2 创建activity的上下文，
+      ContextImpl appContext = createBaseContextForActivity(r);
+      // 3 通过反射，创建 Activity 对象
+       Activity activity = null;
+        try {
+            java.lang.ClassLoader cl = appContext.getClassLoader();
+            
+            activity = mInstrumentation.newActivity(
+                    cl, component.getClassName(), r.intent);
+                    
+            StrictMode.incrementExpectedActivityCount(activity.getClass());
+            r.intent.setExtrasClassLoader(cl);
+            r.intent.prepareToEnterProcess();
+            if (r.state != null) {
+                r.state.setClassLoader(cl);
+            }
+        } catch (Exception e) {
+        // 实例化activity失败 
+            if (!mInstrumentation.onException(activity, e)) {
+                throw new RuntimeException(
+                    "Unable to instantiate activity " + component
+                    + ": " + e.toString(), e);
+            }
+        }
+        
+        // 4, 创建application 对象 ，但是这里不会真正的去创建，因为在拉起进程的阶段已经做过了。直接返回之前的对象即可
+          Application app = r.packageInfo.makeApplication(false, mInstrumentation);
+        ...
+        // 5. attach 绑定上下文和window相关信息
+         appContext.setOuterContext(activity);
+          activity.attach(appContext, this, getInstrumentation(), r.token,
+                        r.ident, app, r.intent, r.activityInfo, title, r.parent,
+                        r.embeddedID, r.lastNonConfigurationInstances, config,
+                        r.referrer, r.voiceInteractor, window, r.configCallback,
+                        r.assistToken);
+       // 6, 设置主题
+       
+       int theme = r.activityInfo.getThemeResource();
+       if (theme != 0) {
+           activity.setTheme(theme);
+       }
+                
+        // 7, 回调onCreate() 方法   
+      if (r.isPersistable()) {
+           mInstrumentation.callActivityOnCreate(activity, r.state, r.persistentState);
+       } else {
+           mInstrumentation.callActivityOnCreate(activity, r.state);
+       }
+       // 8 ,存入键值对中 ArrayMap<IBinder, ActivityClientRecord> mActivities
+         synchronized (mResourcesManager) {
+                mActivities.put(r.token, r);
+            }
+       // ... 
+ }
+ 
+```
+
+2. 创建activity的上下文。内部通过 new contextImpl() 对象。包含activity相关的资源信息、屏幕信息、包信息等。
+3. 第七步中，会回调 Activity中的 performCreate(),最终调用 onCreate()方法。
+
+## ActivityThread.createBaseContextForActivity()
+
+```
+ private ContextImpl createBaseContextForActivity(ActivityClientRecord r) {
+   //...
+   ContextImpl appContext = ContextImpl.createActivityContext(
+                this, r.packageInfo, r.activityInfo, r.token, displayId, r.overrideConfig);
+   //...
+ }
+```
+
+## ContextImpl.createActivityContext()
+
+```
+static ContextImpl createActivityContext(ActivityThread mainThread,
+            LoadedApk packageInfo, ActivityInfo activityInfo, IBinder activityToken, int displayId,
+            Configuration overrideConfiguration) {
+
+        String[] splitDirs = packageInfo.getSplitResDirs();
+        ClassLoader classLoader = packageInfo.getClassLoader();
+
+        // ...
+        // new出 ContextImpl对象
+        ContextImpl context = new ContextImpl(null, mainThread, packageInfo, activityInfo.splitName,
+                activityToken, null, 0, classLoader, null);
+
+        // Clamp display ID to DEFAULT_DISPLAY if it is INVALID_DISPLAY.
+        displayId = (displayId != Display.INVALID_DISPLAY) ? displayId : Display.DEFAULT_DISPLAY;
+      
+        final CompatibilityInfo compatInfo = (displayId == Display.DEFAULT_DISPLAY)
+                ? packageInfo.getCompatibilityInfo()
+                : CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO;
+        // 资源管理
+        final ResourcesManager resourcesManager = ResourcesManager.getInstance();
+
+        // Create the base resources for which all configuration contexts for this Activity
+        // will be rebased upon.
+        // 设置资源信息到context 
+        context.setResources(resourcesManager.createBaseActivityResources(activityToken,
+                packageInfo.getResDir(),
+                splitDirs,
+                packageInfo.getOverlayDirs(),
+                packageInfo.getApplicationInfo().sharedLibraryFiles,
+                displayId,
+                overrideConfiguration,
+                compatInfo,
+                classLoader));
+        context.mDisplay = resourcesManager.getAdjustedDisplay(displayId,
+                context.getResources());
+        return context;
+    }   
+
+```
+
+## Activity.attach()
+
+绑定信息
+
+```
+
+ final void attach(Context context, ActivityThread aThread,
+            Instrumentation instr, IBinder token, int ident,
+            Application application, Intent intent, ActivityInfo info,
+            CharSequence title, Activity parent, String id,
+            NonConfigurationInstances lastNonConfigurationInstances,
+            Configuration config, String referrer, IVoiceInteractor voiceInteractor,
+            Window window, ActivityConfigCallback activityConfigCallback, IBinder assistToken) {
+            
+            // 1 绑定context，因为activity是继承context的，所以mBase的赋值就在此处 
+            attachBaseContext(context);
+            
+           // 2 fragments attach
+            mFragments.attachHost(null /*parent*/);
+            
+            // 3 绑定window
+            mWindow = new PhoneWindow(this, window, activityConfigCallback);
+           mWindow.setWindowControllerCallback(this);
+           mWindow.setCallback(this); // 设置callback 
+           mWindow.setOnWindowDismissedCallback(this);
+           mWindow.getLayoutInflater().setPrivateFactory(this);
+            
+           // 4 一堆赋值 
+           mInstrumentation = instr;
+           mToken = token;
+           mAssistToken = assistToken;
+           mIdent = ident;
+           mApplication = application;
+           mIntent = intent;
+           mReferrer = referrer;
+           mComponent = intent.getComponent();
+           mActivityInfo = info;
+           mTitle = title;
+           mParent = parent;
+           mEmbeddedID = id; 
+          // ....
+            
+ }           
+ 
+```
+
+> android-29/android/app/Instrumentation.java
+
+## Instrumentation.callActivityOnCreate
+
+```
+  public void callActivityOnCreate(Activity activity, Bundle icicle) {
+        prePerformCreate(activity);
+        activity.performCreate(icicle);
+        postPerformCreate(activity);
+    }
+```
+
+## Activity.performCreate()
+
+```
+ final void performCreate(Bundle icicle) {
+        performCreate(icicle, null);
+    }
+
+    @UnsupportedAppUsage
+    final void performCreate(Bundle icicle, PersistableBundle persistentState) {
+        dispatchActivityPreCreated(icicle);
+        mCanEnterPictureInPicture = true;
+        restoreHasCurrentPermissionRequest(icicle);
+        
+        if (persistentState != null) {
+            onCreate(icicle, persistentState);
+        } else {
+            // 调用  onCreate() 方法 
+            onCreate(icicle);
+        }
+        writeEventLog(LOG_AM_ON_CREATE_CALLED, "performCreate");
+        mActivityTransitionState.readState(icicle);
+
+        mVisibleFromClient = !mWindow.getWindowStyle().getBoolean(
+                com.android.internal.R.styleable.Window_windowNoDisplay, false);
+                // 分发到fragment 
+        mFragments.dispatchActivityCreated();
+        mActivityTransitionState.setEnterActivityOptions(this, getActivityOptions());
+        dispatchActivityPostCreated(icicle);
+    }
+```
+
+至此，一个activity的对象就被创建出来，并且执行了onCreate()方法。 那么其他生命周期方法是什么时候调用的呢？
+
+还记得 
+
+
+
+
+
+   
+
+
+
+
+
+
+
+
+
+
 
 
 
