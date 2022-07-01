@@ -83,3 +83,6 @@ lint/generated/
 lint/outputs/
 lint/tmp/
 # lint/reports/
+/.idea/.gitignore
+/.idea/misc.xml
+/.idea/leetcode/editor.xml
