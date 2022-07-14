@@ -300,7 +300,7 @@ public Intent registerReceiver(IApplicationThread caller, String callerPackage,
                 // 得到 map，key是 action，value是该action对应的所有的intent集合  
                 ArrayMap<String, ArrayList<Intent>> stickies = mStickyBroadcasts.get(id);
                 if (stickies != null) {
-                    // 根据action 来获取 intent集合 
+                    // 根据action 对应多个intent 
                     ArrayList<Intent> intents = stickies.get(action);
                     if (intents != null) {
                         if (stickyIntents == null) {
@@ -429,6 +429,157 @@ public Intent registerReceiver(IApplicationThread caller, String callerPackage,
     }
 }
 ```
+
+- mReceiverResolver ： 给已注册的广播接收者解析intent。 持有 BroadcastFilter 引用(IntentFilter的子类)
+- ReceiverList：
+
+注册，目前到此结束。
+
+从内存的角度来理解？
+
+我目前的理解： 一个广播接受者，可以对应多个 intent-filter接收器，也就是actions。
+
+mReceiverResolver 持有 BroadcastFilter对象，BroadcastFilter对象又持有 ReceiverList对象， ReceiverList对象 又持有
+receiver对象，receiver对象就是 app传递过来的 ServiceDispatcher对象。
+
+目前的疑惑： 广播发送的时候是从哪里寻找的？？
+
+# 五、App端发送广播
+
+## 5.1 ContextImpl.sendBroadcast()
+
+```
+ @Override
+    public void sendBroadcast(Intent intent) {
+        warnIfCallingFromSystemProcess();
+        String resolvedType = intent.resolveTypeIfNeeded(getContentResolver());
+        try {
+            intent.prepareToLeaveProcess(this);
+            ActivityManager.getService().broadcastIntent(
+                    mMainThread.getApplicationThread(), intent, resolvedType, null,
+                    Activity.RESULT_OK, null, null, null, AppOpsManager.OP_NONE, null, false, false,
+                    getUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+```
+
+其实发送广播，就是发送intent，然后去系统中过滤出来 intent-filter规则一样的intent。
+
+## 5.2 AMS.broadcastIntent()
+
+```
+public final int broadcastIntent(IApplicationThread caller,
+        Intent intent, String resolvedType, IIntentReceiver resultTo,
+        int resultCode, String resultData, Bundle resultExtras,
+        String[] requiredPermissions, int appOp, Bundle bOptions,
+        boolean serialized, boolean sticky, int userId) {
+    enforceNotIsolatedCaller("broadcastIntent");
+    
+    synchronized(this) {
+        // 验证intent合法性
+        intent = verifyBroadcastLocked(intent);
+
+        final ProcessRecord callerApp = getRecordForAppLocked(caller);
+        final int callingPid = Binder.getCallingPid();
+        final int callingUid = Binder.getCallingUid();
+
+        final long origId = Binder.clearCallingIdentity();
+        try {
+            return broadcastIntentLocked(callerApp,
+                    callerApp != null ? callerApp.info.packageName : null,
+                    intent, resolvedType, resultTo, resultCode, resultData, resultExtras,
+                    requiredPermissions, appOp, bOptions, serialized, sticky,
+                    callingPid, callingUid, callingUid, callingPid, userId);
+        } finally {
+            Binder.restoreCallingIdentity(origId);
+        }
+    }
+}
+
+```
+
+## 5.3 broadcastIntentLocked()
+
+```
+@GuardedBy("this")
+final int broadcastIntentLocked(ProcessRecord callerApp,
+        String callerPackage, Intent intent, String resolvedType,
+        IIntentReceiver resultTo, int resultCode, String resultData,
+        Bundle resultExtras, String[] requiredPermissions, int appOp, Bundle bOptions,
+        boolean ordered, boolean sticky, int callingPid, int callingUid, int realCallingUid,
+        int realCallingPid, int userId) {
+    return broadcastIntentLocked(callerApp, callerPackage, intent, resolvedType, resultTo,
+        resultCode, resultData, resultExtras, requiredPermissions, appOp, bOptions, ordered,
+        sticky, callingPid, callingUid, realCallingUid, realCallingPid, userId,
+        false /* allowBackgroundActivityStarts */);
+}
+
+```
+
+## 5.4 broadcastIntentLocked()
+
+```
+@GuardedBy("this")
+final int broadcastIntentLocked(ProcessRecord callerApp,
+        String callerPackage, Intent intent, String resolvedType,
+        IIntentReceiver resultTo, int resultCode, String resultData,
+        Bundle resultExtras, String[] requiredPermissions, int appOp, Bundle bOptions,
+        boolean ordered, boolean sticky, int callingPid, int callingUid, int realCallingUid,
+        int realCallingPid, int userId, boolean allowBackgroundActivityStarts) {
+        
+        intent = new Intent(intent);
+
+         // user用户验证
+         
+         // 检测是不是只有系统才能够发送的广播？ 是不是系统的广播？   
+            
+        // 判断是否是用户被移除、包添加或移除、替换
+        
+         // Figure out who all will receive this broadcast.
+         
+        List receivers = null;  // 元素类型为 ：ResolveInfo
+    
+        // 得到所有的静态和动态广播，加入到 receivers列表中
+          if ((receivers != null && receivers.size() > 0)
+                || resultTo != null) {
+            
+            BroadcastQueue queue = broadcastQueueForIntent(intent);
+            
+            BroadcastRecord r = new BroadcastRecord(queue, intent, callerApp,
+                    callerPackage, callingPid, callingUid, callerInstantApp, resolvedType,
+                    requiredPermissions, appOp, brOptions, receivers, resultTo, resultCode,
+                    resultData, resultExtras, ordered, sticky, false, userId,
+                    allowBackgroundActivityStarts, timeoutExempt);
+
+            if (DEBUG_BROADCAST) Slog.v(TAG_BROADCAST, "Enqueueing ordered broadcast " + r);
+
+            final BroadcastRecord oldRecord =
+                    replacePending ? queue.replaceOrderedBroadcastLocked(r) : null;
+            if (oldRecord != null) {
+                //...
+            } else {
+                queue.enqueueOrderedBroadcastLocked(r);
+                queue.scheduleBroadcastsLocked();
+            }
+        } else {
+           //...
+        }
+
+        return ActivityManager.BROADCAST_SUCCESS;
+        
+
+}
+```
+
+既然说把所有的静态、动态的广播都加入到 receivers列表中。那么，静态和动态的广播从哪里来的？
+
+跟之前的注册的有什么关系？ 注册？ 到底是注册到什么地方呢？ ProcessRecord？
+
+
+
+
 
 
 
