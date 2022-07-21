@@ -443,7 +443,7 @@ public Intent registerReceiver(IApplicationThread caller, String callerPackage,
 
 注册，目前到此结束。
 
-从内存的角度来理解？
+从内存中对象的角度来理解？
 
 我目前的理解： 一个广播接受者，可以对应多个 intent-filter接收器，也就是actions。
 
@@ -473,7 +473,7 @@ receiver对象，receiver对象就是 app传递过来的 ServiceDispatcher对象
     }
 ```
 
-其实发送广播，就是发送intent，然后去系统中过滤出来 intent-filter规则一样的intent。
+其实发送广播，就是发送intent，然后从系统中过滤出来 intent-filter规则一样的intent。
 
 ## 5.2 AMS.broadcastIntent()
 
@@ -507,6 +507,7 @@ public final int broadcastIntent(IApplicationThread caller,
 }
 
 ```
+serialized : false，不是有序广播
 
 ## 5.3 broadcastIntentLocked()
 
@@ -525,7 +526,7 @@ final int broadcastIntentLocked(ProcessRecord callerApp,
 }
 
 ```
-
+ordered： false 
 ## 5.4 broadcastIntentLocked()
 
 ```
@@ -537,6 +538,7 @@ final int broadcastIntentLocked(ProcessRecord callerApp,
         boolean ordered, boolean sticky, int callingPid, int callingUid, int realCallingUid,
         int realCallingPid, int userId, boolean allowBackgroundActivityStarts) {
         
+        //重新创建一个intent 
         intent = new Intent(intent);
 
          // user用户验证
@@ -548,13 +550,20 @@ final int broadcastIntentLocked(ProcessRecord callerApp,
          // Figure out who all will receive this broadcast.
          
         List receivers = null;  // 元素类型为 ：ResolveInfo
+      // Need to resolve the intent to interested receivers... 
+        if ((intent.getFlags()&Intent.FLAG_RECEIVER_REGISTERED_ONLY)
+                 == 0) {
+                 //解析与这次intent匹配的接收者
+            receivers = collectReceiverComponents(intent, resolvedType, callingUid, users);
+        }
     
         // 得到所有的静态和动态广播，加入到 receivers列表中
           if ((receivers != null && receivers.size() > 0)
                 || resultTo != null) {
             
+            // 根据intent 获取 BroadcastQueue 
             BroadcastQueue queue = broadcastQueueForIntent(intent);
-            
+            // 创建一个br对象，把 receivers传进去
             BroadcastRecord r = new BroadcastRecord(queue, intent, callerApp,
                     callerPackage, callingPid, callingUid, callerInstantApp, resolvedType,
                     requiredPermissions, appOp, brOptions, receivers, resultTo, resultCode,
@@ -568,7 +577,9 @@ final int broadcastIntentLocked(ProcessRecord callerApp,
             if (oldRecord != null) {
                 //...
             } else {
+                // 把这次发送广播的工作加入到队列中
                 queue.enqueueOrderedBroadcastLocked(r);
+                // 开始发送
                 queue.scheduleBroadcastsLocked();
             }
         } else {
@@ -585,8 +596,64 @@ final int broadcastIntentLocked(ProcessRecord callerApp,
 
 跟之前的注册的有什么关系？ 注册？ 到底是注册到什么地方呢？ ProcessRecord？
 
+## 5.5 enqueueOrderedBroadcastLocked()
+> BroadcastQueue.java
+
+## 5.6 scheduleBroadcastsLocked()
+> BroadcastQueue.java
+```
+public void scheduleBroadcastsLocked() {
+    if (DEBUG_BROADCAST) Slog.v(TAG_BROADCAST, "Schedule broadcasts ["
+            + mQueueName + "]: current="
+            + mBroadcastsScheduled);
+
+    if (mBroadcastsScheduled) {
+        return;
+    }
+    mHandler.sendMessage(mHandler.obtainMessage(BROADCAST_INTENT_MSG, this));
+    mBroadcastsScheduled = true;
+}
+```
+发送了一个消息到 handler。
+```
+ private final class BroadcastHandler extends Handler {
+        public BroadcastHandler(Looper looper) {
+            super(looper, null, true);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case BROADCAST_INTENT_MSG: {
+                    if (DEBUG_BROADCAST) Slog.v(
+                            TAG_BROADCAST, "Received BROADCAST_INTENT_MSG ["
+                            + mQueueName + "]");
+                    processNextBroadcast(true);
+                } break;
+                case BROADCAST_TIMEOUT_MSG: {
+                    synchronized (mService) {
+                        broadcastTimeoutLocked(true);
+                    }
+                } break;
+            }
+        }
+    }
+```
+## 5.7 processNextBroadcast()
+> BroadcastQueue.java
+```
+final void processNextBroadcast(boolean fromMsg) {
+    synchronized (mService) {
+        processNextBroadcastLocked(fromMsg, false);
+    }
+}
+```
+## 5.8 processNextBroadcastLocked()
+> BroadcastQueue.java
+```
 
 
+```
 
 
 
