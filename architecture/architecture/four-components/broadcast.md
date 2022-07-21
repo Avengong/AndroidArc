@@ -114,7 +114,7 @@ LocalBroadcastManager.getInstance(getApplicationContext()).sendBroadcast(intent)
 
 # 三、注册过程
 
-## 3.1 Context.registerReceiver()
+## 3.1 ContextImpl.registerReceiver()
 
 > ContextImpl.java
 
@@ -254,8 +254,16 @@ ReceiverDispatcher(BroadcastReceiver receiver, Context context,
 IIntentReceiver对象。
 
 ## 3.3 AMS.registerReceiver()
-
+直接看 AMS的
 # 四、AMS端 registerReceiver()
+```
+
+
+
+```
+
+
+
 
 ## 4.1 registerReceiver()
 
